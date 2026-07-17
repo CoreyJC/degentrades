@@ -425,11 +425,37 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
     s.volatility = Math.min(s.volatility * (1 + impactPct * 0.3), 5.0);
   }
 
+  // Update the last candle to reflect this trade immediately
+  const nowSec = Math.floor(Date.now() / 1000);
+  const history = s.history;
+  if (history.length > 0) {
+    const lastCandle = history[history.length - 1];
+    if (lastCandle.time === nowSec) {
+      // Same second — update the existing candle
+      lastCandle.high = Math.max(lastCandle.high, s.price);
+      lastCandle.low = Math.min(lastCandle.low, s.price);
+      lastCandle.close = s.price;
+      lastCandle.volume += Math.abs(impactPct) * 500; // volume spike for trade
+    } else {
+      // New second — create a new candle
+      history.push({
+        time: nowSec,
+        open: s.price,
+        high: s.price,
+        low: s.price,
+        close: s.price,
+        volume: Math.abs(impactPct) * 500,
+      });
+      if (history.length > MAX_CANDLES) history.shift();
+    }
+  }
+
   // Broadcast the impact immediately so the chart updates in real-time
   if (io) {
     const newMC = s.price * TOTAL_SUPPLY;
+    const lastCandle = s.history.length > 0 ? s.history[s.history.length - 1] : null;
     io.emit('price_update', {
-      [coinId]: { id: coinId, price: s.price, marketCap: newMC, holderCount: s.holderCount },
+      [coinId]: { id: coinId, price: s.price, marketCap: newMC, holderCount: s.holderCount, candle: lastCandle },
     });
   }
   prisma.coin.update({ where: { id: coinId }, data: { currentPrice: s.price } }).catch(() => {});
