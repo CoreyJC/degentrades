@@ -24,7 +24,9 @@ function fmtMC(mc) {
   return `$${mc.toFixed(0)}`;
 }
 
-function calcSMA(candles, period = 20) {
+const SMA_PERIOD = 9;
+
+function calcSMA(candles, period = SMA_PERIOD) {
   return candles.map((c, i) => {
     if (i < period - 1) return null;
     const avg = candles.slice(i - period + 1, i + 1).reduce((s, x) => s + x.close, 0) / period;
@@ -279,9 +281,9 @@ export default function CoinModal({ coinId, onClose }) {
           cache.push(mcCandle);
           if (cache.length > 500) cache.shift();
         }
-        if (smaRef.current && cache.length >= 20) {
-          const slice = cache.slice(-20);
-          const avg   = slice.reduce((s, x) => s + x.close, 0) / 20;
+        if (smaRef.current && cache.length >= SMA_PERIOD) {
+          const slice = cache.slice(-SMA_PERIOD);
+          const avg   = slice.reduce((s, x) => s + x.close, 0) / SMA_PERIOD;
           smaRef.current.update({ time: mcCandle.time, value: avg });
         }
       }
