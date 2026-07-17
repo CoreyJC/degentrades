@@ -319,96 +319,182 @@ export default function CoinDetail() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Buy */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="font-semibold text-green-400 mb-3">Buy {coin.ticker}</h3>
-          {user ? (
-            <>
-              <div className="text-xs text-gray-500 mb-2">
-                Balance: {portfolio?.solBalance.toFixed(4) ?? '—'} SOL
-              </div>
-              <div className="flex gap-2 mb-3">
-                {[25, 50, 100].map((pct) => (
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-green-400">Buy {coin.ticker}</h3>
+            {user && portfolio && (
+              <span className="text-xs text-gray-500 font-mono">
+                {portfolio.solBalance.toFixed(2)} SOL available
+              </span>
+            )}
+          </div>
+
+          {/* Quick SOL amount chips */}
+          <div className="mb-3">
+            <div className="text-xs text-gray-600 mb-1.5 uppercase tracking-wider">Quick Buy</div>
+            <div className="flex flex-wrap gap-1.5">
+              {[0.1, 0.5, 1, 5, 10].map((amt) => (
+                <button
+                  key={amt}
+                  onClick={() => setSolAmt(String(amt))}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
+                    ${solAmt === String(amt)
+                      ? 'bg-green-600 border-green-600 text-white'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
+                >
+                  {amt} SOL
+                </button>
+              ))}
+              {user && portfolio && (
+                <button
+                  onClick={() => setSolAmt(portfolio.solBalance.toFixed(4))}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
+                    ${solAmt === portfolio.solBalance.toFixed(4)
+                      ? 'bg-green-600 border-green-600 text-white'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
+                >
+                  MAX
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* % of balance chips */}
+          {user && portfolio && (
+            <div className="mb-3">
+              <div className="text-xs text-gray-600 mb-1.5 uppercase tracking-wider">% of Balance</div>
+              <div className="flex gap-1.5">
+                {[10, 25, 50, 75, 100].map((pct) => (
                   <button
                     key={pct}
-                    onClick={() => setSolAmt(((portfolio?.solBalance ?? 0) * pct / 100).toFixed(4))}
-                    className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded"
+                    onClick={() => setSolAmt(((portfolio.solBalance * pct) / 100).toFixed(4))}
+                    className="flex-1 text-xs py-1.5 rounded-lg border border-gray-700 bg-gray-800
+                      text-gray-400 hover:border-green-700 hover:text-green-400 transition-all"
                   >
                     {pct}%
                   </button>
                 ))}
               </div>
-            </>
-          ) : (
-            <div className="text-xs text-gray-600 mb-4">Sign in to see your balance</div>
-          )}
-          <input
-            type="number" min="0" step="any"
-            placeholder="SOL amount"
-            value={solAmt}
-            onChange={(e) => setSolAmt(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2
-              text-sm mb-3 focus:outline-none focus:border-green-600"
-          />
-          {solAmt && price > 0 && (
-            <div className="text-xs text-gray-500 mb-3">
-              ≈ {(parseFloat(solAmt) / price).toExponential(3)} {coin.ticker}
             </div>
           )}
+
+          {/* Custom input */}
+          <div className="relative mb-2">
+            <input
+              type="number" min="0" step="any"
+              placeholder="SOL amount"
+              value={solAmt}
+              onChange={(e) => setSolAmt(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5
+                text-sm focus:outline-none focus:border-green-600 pr-14"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-mono">SOL</span>
+          </div>
+
+          {/* Estimate */}
+          {solAmt && parseFloat(solAmt) > 0 && price > 0 && (
+            <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">You receive</span>
+                <span className="text-white font-mono">{(parseFloat(solAmt) / price).toExponential(3)} {coin.ticker}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">USD value</span>
+                <span className="text-gray-400 font-mono">${(parseFloat(solAmt) * 150).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={buy} disabled={busy}
-            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white
-              font-semibold py-2 rounded-lg transition-colors"
+            onClick={buy} disabled={busy || !solAmt || parseFloat(solAmt) <= 0}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed
+              text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
           >
-            {user ? 'Buy' : '🔒 Sign in to Buy'}
+            {user ? (busy ? 'Buying...' : `Buy ${coin.ticker}`) : '🔒 Sign in to Buy'}
           </button>
         </div>
 
         {/* Sell */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <h3 className="font-semibold text-red-400 mb-3">Sell {coin.ticker}</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-red-400">Sell {coin.ticker}</h3>
+            {user && holding && (
+              <span className={`text-xs font-mono ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {pnl >= 0 ? '+' : ''}{pnl?.toFixed(3)} SOL ({pnlPct?.toFixed(1)}%)
+              </span>
+            )}
+          </div>
+
           {user && holding ? (
             <>
-              <div className="text-xs text-gray-500 mb-1">
+              <div className="text-xs text-gray-500 mb-3 font-mono">
                 Holding: {holding.amount.toExponential(3)} {coin.ticker}
               </div>
-              <div className={`text-xs mb-2 ${pnl != null && pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                P&L: {pnl != null ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)} SOL (${pnlPct?.toFixed(2)}%)` : '—'}
-              </div>
-              <div className="flex gap-2 mb-3">
-                {[25, 50, 100].map((pct) => (
-                  <button
-                    key={pct}
-                    onClick={() => setCoinAmt((holding.amount * pct / 100).toExponential(6))}
-                    className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded"
-                  >
-                    {pct}%
-                  </button>
-                ))}
+
+              {/* % of holding chips */}
+              <div className="mb-3">
+                <div className="text-xs text-gray-600 mb-1.5 uppercase tracking-wider">Sell Amount</div>
+                <div className="flex gap-1.5">
+                  {[10, 25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => setCoinAmt((holding.amount * pct / 100).toExponential(6))}
+                      className={`flex-1 text-xs py-1.5 rounded-lg border transition-all
+                        ${pct === 100
+                          ? 'border-red-800 bg-red-950/40 text-red-400 hover:bg-red-900/40'
+                          : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-red-700 hover:text-red-400'}`}
+                    >
+                      {pct === 100 ? 'ALL' : `${pct}%`}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           ) : user ? (
-            <div className="text-xs text-gray-600 mb-4">You don't hold any {coin.ticker}</div>
+            <div className="text-xs text-gray-600 mb-4 py-3 text-center border border-gray-800 rounded-lg">
+              You don't hold any {coin.ticker}
+            </div>
           ) : (
-            <div className="text-xs text-gray-600 mb-4">Sign in to trade {coin.ticker}</div>
-          )}
-          <input
-            type="number" min="0" step="any"
-            placeholder={`${coin.ticker} amount`}
-            value={coinAmt}
-            onChange={(e) => setCoinAmt(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2
-              text-sm mb-3 focus:outline-none focus:border-red-600"
-          />
-          {coinAmt && price > 0 && (
-            <div className="text-xs text-gray-500 mb-3">
-              ≈ {(parseFloat(coinAmt) * price).toFixed(6)} SOL
+            <div className="text-xs text-gray-600 mb-4 py-3 text-center border border-gray-800 rounded-lg">
+              Sign in to trade {coin.ticker}
             </div>
           )}
+
+          {/* Custom input */}
+          <div className="relative mb-2">
+            <input
+              type="number" min="0" step="any"
+              placeholder={`${coin.ticker} amount`}
+              value={coinAmt}
+              onChange={(e) => setCoinAmt(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2.5
+                text-sm focus:outline-none focus:border-red-600 pr-20"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-mono truncate max-w-[60px]">
+              {coin.ticker}
+            </span>
+          </div>
+
+          {/* Estimate */}
+          {coinAmt && parseFloat(coinAmt) > 0 && price > 0 && (
+            <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">You receive</span>
+                <span className="text-white font-mono">{(parseFloat(coinAmt) * price).toFixed(4)} SOL</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">USD value</span>
+                <span className="text-gray-400 font-mono">${(parseFloat(coinAmt) * price * 150).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={sell} disabled={busy || (user && !holding)}
-            className="w-full bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white
-              font-semibold py-2 rounded-lg transition-colors"
+            onClick={sell}
+            disabled={busy || !coinAmt || parseFloat(coinAmt) <= 0 || (user && !holding)}
+            className="w-full bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed
+              text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
           >
-            {user ? 'Sell' : '🔒 Sign in to Sell'}
+            {user ? (busy ? 'Selling...' : `Sell ${coin.ticker}`) : '🔒 Sign in to Sell'}
           </button>
         </div>
       </div>
