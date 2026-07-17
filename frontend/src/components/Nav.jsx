@@ -23,8 +23,8 @@ export default function Nav() {
     <nav className="border-b border-gray-800 bg-gray-950/90 backdrop-blur sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="text-lg font-bold text-white flex items-center gap-2">
-          🎰 <span>DegenTrades</span>
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/logo.png" alt="DegenTrades" className="h-9 w-auto" />
         </Link>
 
         {/* Links */}
