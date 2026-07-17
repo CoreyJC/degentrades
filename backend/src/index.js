@@ -37,6 +37,19 @@ app.use('/api/leaderboard', leaderboardRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// TEMP: one-time wipe endpoint — remove after use
+app.post('/admin/wipe-coins', async (req, res) => {
+  const prisma = require('./lib/prisma');
+  await prisma.transaction.deleteMany({});
+  await prisma.holding.deleteMany({});
+  await prisma.portfolio.deleteMany({});
+  const r = await prisma.coin.deleteMany({});
+  // Also clear price engine state
+  priceEngine.stop();
+  priceEngine.start(io);
+  res.json({ deleted: r.count });
+});
+
 // Socket.io
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
