@@ -16,6 +16,15 @@ function fmt(p) {
   return `$${p.toFixed(4)}`;
 }
 
+/** Format token amounts as readable numbers: 216,600 / 1.2M / 4.5B */
+function fmtTokens(n) {
+  if (n == null) return '0';
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000)     return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)         return `${Math.round(n).toLocaleString()}`;
+  return n.toFixed(2);
+}
+
 function fmtMC(mc) {
   if (mc == null) return '—';
   if (mc >= 1_000_000_000) return `$${(mc / 1_000_000_000).toFixed(2)}B`;
@@ -542,7 +551,7 @@ export default function CoinModal({ coinId, onClose }) {
                     {user && holding ? (
                       <>
                         <div className="text-xs text-gray-500 mb-3 font-mono">
-                          Holding: {holding.amount.toExponential(3)} {coin.ticker}
+                          Holding: {fmtTokens(holding.amount)} {coin.ticker}
                         </div>
 
                         {/* % of holding chips */}
