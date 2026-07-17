@@ -324,13 +324,16 @@ export default function CoinModal({ coinId, onClose }) {
     } finally { setBusy(false); }
   }
 
-  async function sell() {
+  async function sell(sellAll = false) {
     if (!requireAuth()) return;
     const amt = parseFloat(coinAmt);
-    if (!amt || amt <= 0) return push('Enter a valid amount', 'error');
+    if (!sellAll && (!amt || amt <= 0)) return push('Enter a valid amount', 'error');
     setBusy(true);
     try {
-      const { data } = await axios.post('/api/trade/sell', { coinId, coinAmount: amt });
+      const payload = sellAll
+        ? { coinId, sellAll: true }
+        : { coinId, coinAmount: amt };
+      const { data } = await axios.post('/api/trade/sell', payload);
       const mcAfterSell = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
       push(`💰 Sold ${coin.ticker} · MC ${fmtMC(mcAfterSell)} · +${data.solReceived.toFixed(4)} SOL`, 'success');
       setCoinAmt('');
@@ -547,7 +550,7 @@ export default function CoinModal({ coinId, onClose }) {
                             {[10, 25, 50, 75, 100].map((pct) => (
                               <button
                                 key={pct}
-                                onClick={() => setCoinAmt((holding.amount * pct / 100).toExponential(6))}
+                                onClick={() => pct === 100 ? sell(true) : setCoinAmt((holding.amount * pct / 100).toExponential(6))}
                                 className={`flex-1 text-xs py-1.5 rounded-lg border transition-all
                                   ${pct === 100
                                     ? 'border-red-800 bg-red-950/40 text-red-400 hover:bg-red-900/40'

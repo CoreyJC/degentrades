@@ -85,9 +85,9 @@ router.post('/buy', authenticate, async (req, res) => {
 
 // POST /api/trade/sell
 router.post('/sell', authenticate, async (req, res) => {
-  const { coinId, coinAmount } = req.body;
+  const { coinId, coinAmount, sellAll } = req.body;
 
-  if (!coinId || !coinAmount || coinAmount <= 0) {
+  if (!coinId || (!coinAmount && !sellAll) || (coinAmount != null && coinAmount <= 0)) {
     return res.status(400).json({ error: 'coinId and coinAmount (>0) are required' });
   }
 
@@ -99,13 +99,23 @@ router.post('/sell', authenticate, async (req, res) => {
       where: { userId_coinId: { userId: req.userId, coinId } },
     });
 
-    if (!holding || holding.amount < coinAmount) {
+    if (!holding || holding.amount <= 0) {
+      return res.status(400).json({ error: 'Insufficient holdings' });
+    }
+
+    // sellAll uses the exact DB amount — no float precision issues
+    // otherwise clamp to holding.amount with a small epsilon tolerance
+    const actualAmount = sellAll
+      ? holding.amount
+      : Math.min(coinAmount, holding.amount);
+
+    if (actualAmount <= 0) {
       return res.status(400).json({ error: 'Insufficient holdings' });
     }
 
     const currentPrice  = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
-    const solReceived   = coinAmount * currentPrice;
-    const newAmount     = holding.amount - coinAmount;
+    const solReceived   = actualAmount * currentPrice;
+    const newAmount     = holding.amount - actualAmount;
     const sellPnlPct    = holding.avgBuyPrice > 0
       ? ((currentPrice - holding.avgBuyPrice) / holding.avgBuyPrice) * 100
       : 0;
@@ -115,7 +125,7 @@ router.post('/sell', authenticate, async (req, res) => {
         where: { userId: req.userId },
         data: { solBalance: { increment: solReceived } },
       }),
-      newAmount > 0
+      newAmount > 0.000001 // treat dust as zero
         ? prisma.holding.update({
             where: { userId_coinId: { userId: req.userId, coinId } },
             data: { amount: newAmount },
@@ -128,7 +138,7 @@ router.post('/sell', authenticate, async (req, res) => {
           userId:      req.userId,
           coinId,
           type:        'SELL',
-          amount:      coinAmount,
+          amount:      actualAmount,
           price:       currentPrice,
           solSpent:    -solReceived,
           avgBuyPrice: holding.avgBuyPrice,
