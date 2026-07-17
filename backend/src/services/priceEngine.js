@@ -49,6 +49,14 @@ function _updatePhase(s) {
   const athRatio      = s.ath > 0 ? s.price / s.ath : 1;
   const gainFromStart = s.startPrice > 0 ? s.price / s.startPrice : 1;
   const ageMin        = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
+  const marketCap     = s.price * TOTAL_SUPPLY;
+
+  // Once a coin hits migration MC, it's peaked — force distribution
+  // Runners get a brief window above $69K but nothing crazy
+  if (marketCap >= MIGRATION_THRESHOLD && (phase === 'pump' || phase === 'early')) {
+    s.phase = 'distribution';
+    return;
+  }
 
   if (phase === 'early') {
     // Transition to pump if 3x from start
