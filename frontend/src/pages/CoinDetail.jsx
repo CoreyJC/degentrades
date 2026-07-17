@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { createChart, CandlestickSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+
+const TOTAL_SUPPLY = 1_000_000_000;
+
+function calcSMA(candles, period = 20) {
+  return candles.map((c, i) => {
+    if (i < period - 1) return null;
+    const avg = candles.slice(i - period + 1, i + 1).reduce((s, x) => s + x.close, 0) / period;
+    return { time: c.time, value: avg };
+  }).filter(Boolean);
+}
 import axios from 'axios';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -57,9 +67,12 @@ export default function CoinDetail() {
   const { socket }   = useSocket();
   const { push }     = useToast();
 
-  const chartRef     = useRef(null);
-  const seriesRef    = useRef(null);
-  const chartElRef   = useRef(null);
+  const chartRef    = useRef(null);
+  const seriesRef   = useRef(null);
+  const volumeRef   = useRef(null);
+  const smaRef      = useRef(null);
+  const candleCache = useRef([]);
+  const chartElRef  = useRef(null);
 
   const [coin,       setCoin]       = useState(null);
   const [price,      setPrice]      = useState(null);
@@ -101,38 +114,88 @@ export default function CoinDetail() {
   useEffect(() => {
     if (loading || !chartElRef.current) return;
 
-    const chart = createChart(chartElRef.current, {
-      layout:     { background: { type: ColorType.Solid, color: '#030712' }, textColor: '#9ca3af' },
-      grid:       { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
-      crosshair:  { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#1f2937' },
-      timeScale:  { borderColor: '#1f2937', timeVisible: true },
-      width:      chartElRef.current.clientWidth,
-      height:     320,
-    });
-    chartRef.current = chart;
+    let chart = null;
+    let raf   = null;
 
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor:       '#22c55e',
-      downColor:     '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor:   '#22c55e',
-      wickDownColor: '#ef4444',
-    });
-    seriesRef.current = series;
+    raf = requestAnimationFrame(() => {
+      if (!chartElRef.current) return;
+      try {
+        chart = createChart(chartElRef.current, {
+          layout:          { background: { type: ColorType.Solid, color: '#030712' }, textColor: '#9ca3af' },
+          grid:            { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
+          crosshair:       { mode: CrosshairMode.Normal },
+          rightPriceScale: { borderColor: '#1f2937' },
+          timeScale:       { borderColor: '#1f2937', timeVisible: true },
+          localization: {
+            priceFormatter: (p) => {
+              if (p >= 1_000_000) return `$${(p / 1_000_000).toFixed(2)}M`;
+              if (p >= 1_000)    return `$${(p / 1_000).toFixed(1)}K`;
+              return `$${p.toFixed(0)}`;
+            },
+          },
+          autoSize: true,
+          height:   340,
+        });
+        chartRef.current = chart;
 
-    axios.get(`/api/coins/${id}/history`).then(({ data }) => {
-      series.setData(data);
-      chart.timeScale().fitContent();
+        const series = chart.addSeries(CandlestickSeries, {
+          upColor:         '#00ff88',
+          downColor:       '#ff3b3b',
+          borderUpColor:   '#00ff88',
+          borderDownColor: '#ff3b3b',
+          wickUpColor:     '#00ff88',
+          wickDownColor:   '#ff3b3b',
+        });
+        seriesRef.current = series;
+
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+          priceFormat:  { type: 'volume' },
+          priceScaleId: 'volume',
+        });
+        chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        volumeRef.current = volumeSeries;
+
+        const smaSeries = chart.addSeries(LineSeries, {
+          color:            '#f59e0b',
+          lineWidth:        1,
+          priceScaleId:     'right',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        smaRef.current = smaSeries;
+
+        axios.get(`/api/coins/${id}/history`).then(({ data }) => {
+          const mcData = data.map((c) => ({
+            ...c,
+            open:  c.open  * TOTAL_SUPPLY,
+            high:  c.high  * TOTAL_SUPPLY,
+            low:   c.low   * TOTAL_SUPPLY,
+            close: c.close * TOTAL_SUPPLY,
+          }));
+          series.setData(mcData);
+          volumeRef.current?.setData(data.map((c) => ({
+            time:  c.time,
+            value: c.volume,
+            color: c.close >= c.open ? '#00ff8855' : '#ff3b3b55',
+          })));
+          smaRef.current?.setData(calcSMA(mcData));
+          candleCache.current = mcData;
+          chart.timeScale().fitContent();
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Chart init error:', err);
+      }
     });
 
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: chartElRef.current.clientWidth });
-    });
-    ro.observe(chartElRef.current);
-
-    return () => { chart.remove(); ro.disconnect(); };
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (chart) { try { chart.remove(); } catch (_) {} }
+      chartRef.current  = null;
+      seriesRef.current = null;
+      volumeRef.current = null;
+      smaRef.current    = null;
+      candleCache.current = [];
+    };
   }, [loading, id]);
 
   // ── Socket events ─────────────────────────────────────────────────────────
@@ -145,7 +208,27 @@ export default function CoinDetail() {
       setPrice(u.price);
       setCoin((prev) => prev ? { ...prev, currentPrice: u.price } : prev);
       if (seriesRef.current && u.candle) {
-        seriesRef.current.update(u.candle);
+        const mcCandle = {
+          ...u.candle,
+          open:  u.candle.open  * TOTAL_SUPPLY,
+          high:  u.candle.high  * TOTAL_SUPPLY,
+          low:   u.candle.low   * TOTAL_SUPPLY,
+          close: u.candle.close * TOTAL_SUPPLY,
+        };
+        seriesRef.current.update(mcCandle);
+        volumeRef.current?.update({
+          time:  mcCandle.time,
+          value: u.candle.volume,
+          color: mcCandle.close >= mcCandle.open ? '#00ff8855' : '#ff3b3b55',
+        });
+        const cache = candleCache.current;
+        const last  = cache[cache.length - 1];
+        if (last && last.time === mcCandle.time) cache[cache.length - 1] = mcCandle;
+        else { cache.push(mcCandle); if (cache.length > 500) cache.shift(); }
+        if (smaRef.current && cache.length >= 20) {
+          const avg = cache.slice(-20).reduce((s, x) => s + x.close, 0) / 20;
+          smaRef.current.update({ time: mcCandle.time, value: avg });
+        }
       }
     }
 
