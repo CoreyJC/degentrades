@@ -13,29 +13,37 @@ const SPAWN_INTERVAL_MS = 30_000; // exactly 30 seconds
 
 // ── Word banks ─────────────────────────────────────────────────────────────────
 const ADJECTIVES = [
-  'Sleepy', 'Turbo', 'Giga', 'Noodle', 'Skibidi', 'Sigma', 'Gigachad',
-  'Rekt', 'Smooth', 'Degen', 'Based', 'Cozy', 'Feral', 'Chad', 'Maxi',
-  'Plump', 'Crispy', 'Wobbly', 'Galaxy', 'Atomic', 'Cursed', 'Boomer',
-  'Ultra', 'Hyper', 'Stinky', 'Chunky', 'Fluffy', 'Soggy', 'Mega',
-  'Zesty', 'Spooky', 'Yolo', 'Diamond', 'Laser', 'Quantum', 'Cosmic',
-  'Thicc', 'Goblin', 'Sneaky', 'Crusty', 'Sweaty', 'Zoomer', 'Banger',
-  'Grumpy', 'Fomo', 'Rogue', 'Lurking', 'Hidden', 'Final', 'Omega',
+  // internet / degen culture
+  'Skibidi', 'Sigma', 'Giga', 'Based', 'Rekt', 'Ngmi', 'Wagmi', 'Yolo',
+  'Fomo', 'Degen', 'Gigachad', 'Bonk', 'Smol', 'Thicc', 'Turbo',
+  'Goated', 'Cooked', 'Banger', 'Glazed', 'Bricked', 'Cozy', 'Cursed',
+  'Feral', 'Unhinged', 'Menacing', 'Sweaty', 'Sleepy', 'Goofy', 'Sussy',
+  'Fried', 'Crispy', 'Soggy', 'Chunky', 'Crusty', 'Stinky', 'Goblin',
+  'Boomer', 'Doomer', 'Zoomer', 'Bloated', 'Haunted', 'Cosmic', 'Omega',
+  'Ultra', 'Mega', 'Hyper', 'Plump', 'Wobbly', 'Spooky', 'Laser',
+  'Diamond', 'Quantum', 'Atomic', 'Galaxy', 'Lurking', 'Sneaky', 'Final',
 ];
 
 const NOUNS = [
-  'Dog', 'Ape', 'Brain', 'Frog', 'Pepe', 'Cat', 'Rat', 'Goat', 'Monk',
-  'Clown', 'Goblin', 'Shrimp', 'Toad', 'Wizard', 'Sloth', 'Panda',
-  'Hamster', 'Whale', 'Degen', 'Rug', 'Chad', 'Karen', 'Boomer',
-  'Rocket', 'Lambo', 'Gem', 'Shill', 'Bag', 'Pump', 'Dump',
-  'Sniper', 'Pixel', 'Duck', 'Chimp', 'Yeti', 'Bunny', 'Crab',
-  'Narwhal', 'Capybara', 'Raccoon', 'Ferret', 'Iguana', 'Axolotl',
-  'Wojak', 'Pepe', 'Doomer', 'Coomer', 'Bobo', 'Mumu',
+  // animals (real meme energy)
+  'Pepe', 'Doge', 'Shib', 'Floki', 'Bonk', 'Frog', 'Toad', 'Cat',
+  'Dog', 'Ape', 'Chimp', 'Rat', 'Hamster', 'Capybara', 'Raccoon',
+  'Axolotl', 'Narwhal', 'Platypus', 'Ferret', 'Iguana', 'Crab',
+  'Shrimp', 'Goat', 'Sloth', 'Panda', 'Yeti', 'Bunny', 'Duck',
+  // crypto / degen slang
+  'Wojak', 'Chad', 'Karen', 'Bobo', 'Mumu', 'Goblin', 'Clown', 'Wizard',
+  'Rug', 'Pump', 'Dump', 'Bag', 'Shill', 'Gem', 'Whale', 'Degen',
+  'Lambo', 'Tendies', 'Hopium', 'Copium', 'Ngmi', 'Rekt', 'Moon',
+  // random chaos
+  'Corn', 'Sock', 'Spoon', 'Toaster', 'Crayon', 'Helmet', 'Potato',
+  'Noodle', 'Waffle', 'Taco', 'Burrito', 'Nugget', 'Cheeto', 'Donut',
 ];
 
 const SUFFIXES = [
-  'Inu', 'Coin', 'Moon', 'X', 'Rug', 'Token', 'Finance', 'Dao',
-  'Protocol', 'Cash', 'Ai', 'Swap', 'World', 'Gang', 'Club',
-  'Network', 'Labs', 'Base', 'Chain', 'Verse', 'Floki', 'Elon',
+  'Inu', 'Coin', 'Moon', 'X', 'Rug', 'Token', 'Dao', 'Cash', 'Ai',
+  'Swap', 'Gang', 'Club', 'Labs', 'Base', 'Verse', 'Elon', 'Gpt',
+  'Pro', '420', '69', '2049', 'Turbo', 'Ultra', 'Max', 'Plus', 'Go',
+  'Finance', 'Protocol', 'Network', 'Chain', 'World', 'Floki',
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -45,11 +53,12 @@ function rand(arr) {
 }
 
 function generateName() {
-  // ~20% chance of triple-word name for spice
-  if (Math.random() < 0.2) {
-    return `${rand(ADJECTIVES)}${rand(NOUNS)}${rand(NOUNS)}`;
-  }
-  return `${rand(ADJECTIVES)}${rand(NOUNS)}${rand(SUFFIXES)}`;
+  const r = Math.random();
+  if (r < 0.10) return `${rand(NOUNS)}${rand(NOUNS)}${rand(NOUNS)}`; // e.g. PepeDogeCorn
+  if (r < 0.20) return `${rand(ADJECTIVES)}${rand(NOUNS)}${rand(NOUNS)}`; // e.g. GoatedCapybaraRug
+  if (r < 0.30) return `${rand(NOUNS)}${rand(SUFFIXES)}`; // e.g. CornInu
+  if (r < 0.40) return `${rand(ADJECTIVES)}${rand(ADJECTIVES)}${rand(NOUNS)}`; // e.g. SkibidiGoatedDoge
+  return `${rand(ADJECTIVES)}${rand(NOUNS)}${rand(SUFFIXES)}`; // e.g. FerRetGpt69
 }
 
 /**
