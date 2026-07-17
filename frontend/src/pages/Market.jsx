@@ -171,7 +171,7 @@ export default function Market() {
               count={`${newTokens.length} tokens`}
               subtitle="MC < $20K · Newest first"
             />
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
               {newTokens.length === 0 ? (
                 <div className="text-gray-600 text-sm text-center py-8">No new tokens</div>
               ) : (
@@ -190,7 +190,7 @@ export default function Market() {
               count={`${aboutToMigrate.length} tokens`}
               subtitle="MC $20K–$30K · Closest to 🎓"
             />
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
               {aboutToMigrate.length === 0 ? (
                 <div className="text-gray-600 text-sm text-center py-8">None approaching yet</div>
               ) : (
@@ -209,7 +209,7 @@ export default function Market() {
               count={`${justMigrated.length} tokens`}
               subtitle="Graduated · Most recent first"
             />
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
               {justMigrated.length === 0 ? (
                 <div className="text-gray-600 text-sm text-center py-8">
                   <div className="text-4xl mb-2">🎓</div>
