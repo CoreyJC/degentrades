@@ -24,7 +24,7 @@ export default function Nav() {
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="DegenTrades" className="h-9 w-auto" />
+          <img src="/logo.png" alt="DegenTrades" className="h-16 w-auto" />
         </Link>
 
         {/* Links */}
