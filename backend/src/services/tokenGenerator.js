@@ -77,12 +77,12 @@ async function uniqueTicker(base) {
 }
 
 /**
- * Log-uniform random starting price between $0.000001 and $0.01.
- * This mirrors the range real memecoins launch at — mostly micro-cap junk.
+ * Log-uniform random starting price between $0.0000001 and $0.000010.
+ * Max starting MC = $10K — coins must pump to reach the $69K migration threshold.
  */
 function randomStartingPrice() {
-  const logMin = Math.log(0.000001);
-  const logMax = Math.log(0.01);
+  const logMin = Math.log(0.0000001);
+  const logMax = Math.log(0.000010);
   return Math.exp(logMin + Math.random() * (logMax - logMin));
 }
 

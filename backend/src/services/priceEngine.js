@@ -14,7 +14,7 @@ const MAX_CANDLES         = 500;
 const TICK_MS             = 2000;
 const RUG_THRESHOLD       = 0.0000001;
 const TOTAL_SUPPLY        = 1_000_000_000;
-const MIGRATION_THRESHOLD = 30_000; // $30K market cap
+const MIGRATION_THRESHOLD = 69_000; // $69K market cap — meme number, harder to reach
 
 // ── In-memory state ────────────────────────────────────────────────────────────
 // coinId → { price, baseRugProb, createdAt, momentum, volatility, history[], name, ticker, migrated }

@@ -6,8 +6,8 @@ import CoinModal     from '../components/CoinModal';
 import Sparkline     from '../components/Sparkline';
 
 const TOTAL_SUPPLY        = 1_000_000_000;
-const MIGRATION_THRESHOLD = 30_000;
-const ABOUT_TO_MIGRATE    = 20_000;
+const MIGRATION_THRESHOLD = 69_000;
+const ABOUT_TO_MIGRATE    = 50_000;
 
 /** Format market cap as abbreviated string: $1.2K, $24.5K, $1.2M */
 function fmtMC(mc) {
