@@ -198,6 +198,7 @@ export default function CoinModal({ coinId, onClose }) {
 
         axios.get(`/api/coins/${coinId}/history`)
           .then(({ data }) => {
+            if (!data || data.length === 0) return; // will build up shortly
             if (seriesRef.current) {
               // Convert price → market cap for chart display
               const mcData = data.map((c) => ({

@@ -183,6 +183,7 @@ export default function CoinDetail() {
         smaRef.current = smaSeries;
 
         axios.get(`/api/coins/${id}/history`).then(({ data }) => {
+            if (!data || data.length === 0) return; // will build up shortly
           const mcData = data.map((c) => ({
             ...c,
             open:  c.open  * TOTAL_SUPPLY,
