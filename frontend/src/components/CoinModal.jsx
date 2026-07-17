@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
+import { createChart, CandlestickSeries, ColorType, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -132,7 +132,7 @@ export default function CoinModal({ coinId, onClose }) {
         });
         chartRef.current = chart;
 
-        const series = chart.addCandlestickSeries({
+        const series = chart.addSeries(CandlestickSeries, {
           upColor:         '#22c55e',
           downColor:       '#ef4444',
           borderUpColor:   '#22c55e',
