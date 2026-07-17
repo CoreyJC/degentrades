@@ -79,6 +79,24 @@ export default function CoinDetail() {
   const [loading,    setLoading]    = useState(true);
   const [solAmt,     setSolAmt]     = useState('');
   const [coinAmt,    setCoinAmt]    = useState('');
+  const [quickAmounts, setQuickAmounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dt:quickBuy') ?? 'null') ?? [0.1, 0.5, 1, 5, 10]; }
+    catch { return [0.1, 0.5, 1, 5, 10]; }
+  });
+  const [editingChipIdx, setEditingChipIdx] = useState(null);
+  const [editingValue,   setEditingValue]   = useState('');
+
+  function saveChipEdit(idx) {
+    const val = parseFloat(editingValue);
+    if (!isNaN(val) && val > 0) {
+      const next = [...quickAmounts];
+      next[idx] = parseFloat(val.toFixed(4));
+      setQuickAmounts(next);
+      localStorage.setItem('dt:quickBuy', JSON.stringify(next));
+    }
+    setEditingChipIdx(null);
+    setEditingValue('');
+  }
   const [portfolio,  setPortfolio]  = useState(null);
   const [holding,    setHolding]    = useState(null);
   const [busy,       setBusy]       = useState(false);
@@ -332,18 +350,38 @@ export default function CoinDetail() {
           <div className="mb-3">
             <div className="text-xs text-gray-600 mb-1.5 uppercase tracking-wider">Quick Buy</div>
             <div className="flex flex-wrap gap-1.5">
-              {[0.1, 0.5, 1, 5, 10].map((amt) => (
-                <button
-                  key={amt}
-                  onClick={() => setSolAmt(String(amt))}
-                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
-                    ${solAmt === String(amt)
-                      ? 'bg-green-600 border-green-600 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
-                >
-                  {amt} SOL
-                </button>
-              ))}
+              {quickAmounts.map((amt, idx) =>
+                editingChipIdx === idx ? (
+                  <input
+                    key={idx}
+                    autoFocus
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editingValue}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    onBlur={() => saveChipEdit(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveChipEdit(idx);
+                      if (e.key === 'Escape') { setEditingChipIdx(null); setEditingValue(''); }
+                    }}
+                    className="w-16 text-xs px-2 py-1.5 rounded-lg border border-green-500 bg-gray-800 text-white text-center focus:outline-none"
+                  />
+                ) : (
+                  <button
+                    key={idx}
+                    onClick={() => setSolAmt(String(amt))}
+                    onDoubleClick={() => { setEditingChipIdx(idx); setEditingValue(String(amt)); }}
+                    title="Double-click to edit"
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
+                      ${solAmt === String(amt)
+                        ? 'bg-green-600 border-green-600 text-white'
+                        : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
+                  >
+                    {amt} SOL
+                  </button>
+                )
+              )}
               {user && portfolio && (
                 <button
                   onClick={() => setSolAmt(portfolio.solBalance.toFixed(4))}
@@ -356,6 +394,7 @@ export default function CoinDetail() {
                 </button>
               )}
             </div>
+            <div className="text-xs text-gray-700 mt-1">✏️ double-click to edit</div>
           </div>
 
           {/* % of balance chips */}
