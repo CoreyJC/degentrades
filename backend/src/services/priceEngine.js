@@ -1,16 +1,16 @@
 /**
- * priceEngine.js — Realistic Memecoin Price Engine v3
+ * priceEngine.js - Realistic Memecoin Price Engine v3
  *
  * Each coin is assigned a FATE at birth and moves through PHASES:
  *
  *   early → pump → distribution → bleed → dying
  *
  * FATES:
- *   bleeder (60%) — pumps briefly then slowly dies
- *   pumper  (30%) — gets one good run then fades
- *   runner  (10%) — actually makes it, keeps climbing
+ *   bleeder (60%) - pumps briefly then slowly dies
+ *   pumper  (30%) - gets one good run then fades
+ *   runner  (10%) - actually makes it, keeps climbing
  *
- * PHASES define probability tables — dying phase has NO pumps, only decay.
+ * PHASES define probability tables - dying phase has NO pumps, only decay.
  * ATH is tracked so once a coin is 60%+ below its peak, it cannot recover.
  */
 
@@ -40,7 +40,7 @@ function _assignFate() {
 }
 
 // ── Ceiling assignment (personal MC cap before distribution kicks in) ──────────
-// Only runners can reach legendary ceilings — bleeders/pumpers stay near $69K.
+// Only runners can reach legendary ceilings - bleeders/pumpers stay near $69K.
 // Targets: ~1/100 coins reach $10M, ~1/1000 reach $100M, ~1/10000 reach $1B
 function _assignCeiling(fate) {
   if (fate === 'bleeder') return MIGRATION_THRESHOLD;         // always $69K
@@ -49,7 +49,7 @@ function _assignCeiling(fate) {
     if (r < 0.02) return 500_000;                            // 2% of pumpers → $500K
     return MIGRATION_THRESHOLD;                              // rest $69K
   }
-  // runner — rare tiers
+  // runner - rare tiers
   const r = Math.random();
   if (r < 0.002) return 1_000_000_000;                      // 0.2% of runners → $1B   (~1 in 5000 coins)
   if (r < 0.020) return 100_000_000;                        // 1.8% of runners → $100M  (~1 in 555 coins)
@@ -107,9 +107,9 @@ function _updatePhase(s) {
   if (phase === 'bleed') {
     if (athRatio < 0.15) s.phase = 'dying'; // need 85% off ATH to enter death spiral
   }
-  // dying is terminal — no transitions out
+  // dying is terminal - no transitions out
 
-  // ── Stall wakeup — random chance a stalled coin gets noticed ─────────────
+  // ── Stall wakeup - random chance a stalled coin gets noticed ─────────────
   if (s.stalled) {
     const wakeupChance = s.fate === 'runner'  ? 0.030
                        : s.fate === 'pumper' ? 0.018
@@ -127,12 +127,12 @@ function _nextPrice(coinId, s) {
   const { price: p, phase, fate, momentum } = s;
   const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
 
-  // ── NEWBORN — sniper/bot front-run on launch (first 6 ticks ≈ 12 seconds) ─
+  // ── NEWBORN - sniper/bot front-run on launch (first 6 ticks ≈ 12 seconds) ─
   if (s.newbornTicks > 0) {
     const tick = s.newbornTicks; // 6 down to 1
     s.newbornTicks--;
     if (tick >= 5) {
-      // Ticks 6+5: initial sniper spike — scaled by fate
+      // Ticks 6+5: initial sniper spike - scaled by fate
       const base = fate === 'runner' ? _rand(0.40, 0.90)
                  : fate === 'pumper' ? _rand(0.20, 0.55)
                  :                     _rand(0.08, 0.28); // bleeder gets smaller spike
@@ -159,14 +159,14 @@ function _nextPrice(coinId, s) {
     }
   }
 
-  // ── STALLED — coin is flat and looks dead; rare chance to wake up ─────────
+  // ── STALLED - coin is flat and looks dead; rare chance to wake up ─────────
   if (s.stalled) {
     const pct = _rand(0.001, 0.004);
     const dir = Math.random() < 0.48 ? -1 : 1; // very slight downward drift
     return Math.max(p * (1 + dir * pct), 1e-14);
   }
 
-  // ── EARLY — quiet accumulation, tiny moves, no rugs ──────────────────────
+  // ── EARLY - quiet accumulation, tiny moves, no rugs ──────────────────────
   if (phase === 'early') {
     // 5% chance of a surprise early pump to get momentum going
     if (Math.random() < 0.05) {
@@ -193,7 +193,7 @@ function _nextPrice(coinId, s) {
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
 
-    // Mega pump — runners get big ones, scaled by ceiling
+    // Mega pump - runners get big ones, scaled by ceiling
     if (fate === 'runner') {
       const isLegend = s.ceiling >= 10_000_000;
       t += isLegend ? 0.025 : 0.015;
@@ -230,12 +230,12 @@ function _nextPrice(coinId, s) {
     t += 0.08;
     if (roll < t) { s.momentum = Math.max(s.momentum - 0.15, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
 
-    // Dump (no big dump in pump phase — saves that for distribution/bleed)
+    // Dump (no big dump in pump phase - saves that for distribution/bleed)
     s.momentum = Math.max(s.momentum - 0.2, -1.0);
     return Math.max(p * (1 - _rand(0.08, 0.20)), 1e-14);
   }
 
-  // ── DISTRIBUTION — topping out, selling pressure ──────────────────────────
+  // ── DISTRIBUTION - topping out, selling pressure ──────────────────────────
   if (phase === 'distribution') {
     const rugBase = fate === 'runner' ? 0.008 : fate === 'pumper' ? 0.015 : 0.025;
 
@@ -270,9 +270,9 @@ function _nextPrice(coinId, s) {
     return Math.max(p * (1 - dump), 1e-14);
   }
 
-  // ── BLEED — slow grind down, occasional dead cat bounce ──────────────────
+  // ── BLEED - slow grind down, occasional dead cat bounce ──────────────────
   if (phase === 'bleed') {
-    // Reduced rug rate — bleeders deserve a slow death, not instant annihilation
+    // Reduced rug rate - bleeders deserve a slow death, not instant annihilation
     const rugBase = 0.008 + (ageMin > 30 ? 0.006 : 0);
 
     t += rugBase;
@@ -297,14 +297,14 @@ function _nextPrice(coinId, s) {
     t += 0.22;
     if (roll < t) { s.momentum = Math.max(s.momentum - 0.3, -1.0); return Math.max(p * (1 - _rand(0.06, 0.15)), 1e-14); }
 
-    // Big dump — softened, no more 50% single-tick wipeouts in bleed
+    // Big dump - softened, no more 50% single-tick wipeouts in bleed
     s.momentum = -1.0;
     return Math.max(p * (1 - _rand(0.12, 0.28)), 1e-14);
   }
 
-  // ── DYING — death spiral, NO pumps, only down ─────────────────────────────
+  // ── DYING - death spiral, NO pumps, only down ─────────────────────────────
   if (phase === 'dying') {
-    const rugChance = Math.min(0.02 + ageMin * 0.0008, 0.12); // slow burn — coins can linger in dying for a while
+    const rugChance = Math.min(0.02 + ageMin * 0.0008, 0.12); // slow burn - coins can linger in dying for a while
 
     t += rugChance;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.85, 0.99)), 1e-14); }
@@ -334,9 +334,9 @@ function _bootstrap(coin) {
   const startPrice = coin.currentPrice || 1e-7;
   const fate       = _assignFate();
   const ceiling    = _assignCeiling(fate);
-  const history    = []; // start empty — chart builds in real time
+  const history    = []; // start empty - chart builds in real time
 
-  // Stall probability by fate — bleeders go flat most of the time
+  // Stall probability by fate - bleeders go flat most of the time
   const stallProb = fate === 'bleeder' ? 0.62 : fate === 'pumper' ? 0.28 : 0.10;
 
   state[coin.id] = {
@@ -359,7 +359,7 @@ function _bootstrap(coin) {
     // Stall: coin goes sideways and looks dead until it wakes up or dies
     stalled:     Math.random() < stallProb,
     // Simulated holder count
-    holderCount: Math.floor(1 + Math.random() * 2), // 1–3 at birth
+    holderCount: Math.floor(1 + Math.random() * 2), // 1-3 at birth
   };
 }
 
@@ -373,7 +373,7 @@ async function init() {
     state[coin.id].createdAt = coin.createdAt ?? new Date();
   }
   initialized = true;
-  console.log(`💹 Price engine initialized — ${coins.length} coins loaded`);
+  console.log(`💹 Price engine initialized - ${coins.length} coins loaded`);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ function registerCoin(coin) {
   state[coin.id].startPrice = coin.currentPrice;
   state[coin.id].ath        = coin.currentPrice;
   state[coin.id].createdAt  = coin.createdAt ?? new Date();
-  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) — fate: ${state[coin.id].fate}`);
+  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) - fate: ${state[coin.id].fate}`);
 }
 
 function removeCoin(coinId) { delete state[coinId]; }
@@ -397,23 +397,23 @@ function getHolderCount(coinId) { return state[coinId]?.holderCount ?? 1; }
 /**
  * Apply immediate price impact from a user trade.
  * impactSol = SOL equivalent of the trade (positive = buy, negative = sell)
- * Impact scales with trade size vs current market cap — small caps feel it hard.
+ * Impact scales with trade size vs current market cap - small caps feel it hard.
  */
 function applyTradeImpact(coinId, impactSol, isBuy) {
   const s = state[coinId];
   if (!s) return;
 
   const marketCap = s.price * TOTAL_SUPPLY;
-  // 1 game SOL ≈ $1 in the sim economy; multiplier of 2.5 makes trades feel real
-  const rawImpact = Math.abs(impactSol) / marketCap * 2.5;
-  // Cap per-trade impact at 80% so a single buy can’t 10x instantly
-  const impactPct = Math.min(rawImpact, 0.80);
+  // Impact scales with trade size vs market cap — thin liquidity = big moves
+  // 1 SOL into $1K MC = 15% bump | 5 SOL = 75% | 10 SOL = 150% (capped at 5x)
+  const rawImpact = Math.abs(impactSol) / marketCap * 150;
+  const impactPct = Math.min(rawImpact, 5.0); // max 5x price move per single trade
 
   if (isBuy) {
     s.price     = s.price * (1 + impactPct);
     s.momentum  = Math.min(s.momentum + impactPct * 1.5, 1.0);
     s.volatility = Math.min(s.volatility * (1 + impactPct * 0.5), 5.0);
-    // Buying a stalled coin wakes it up — you’re the catalyst
+    // Buying a stalled coin wakes it up - you're the catalyst
     if (s.stalled && impactPct > 0.03) {
       s.stalled = false;
       if (s.fate !== 'bleeder') s.phase = 'pump';
@@ -425,7 +425,7 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
     s.volatility = Math.min(s.volatility * (1 + impactPct * 0.3), 5.0);
   }
 
-  // Update the last candle in place — extend its wick and move the close
+  // Update the last candle in place - extend its wick and move the close
   // Never create a new candle from a trade; let tick() own candle creation
   const history = s.history;
   if (history.length > 0) {
@@ -484,7 +484,7 @@ async function _rugCoin(coinId, finalPrice) {
       });
     }
 
-    // Now clean up — leave coin record as isActive:false so RUG txn FK stays valid
+    // Now clean up - leave coin record as isActive:false so RUG txn FK stays valid
     await prisma.$transaction([
       prisma.transaction.deleteMany({ where: { coinId, type: { in: ['BUY', 'SELL'] } } }),
       prisma.holding.deleteMany({ where: { coinId } }),
@@ -539,7 +539,7 @@ async function tick() {
 
     const marketCap = next * TOTAL_SUPPLY;
 
-    // ── Holder count — MC-driven target with smooth convergence ────────────
+    // ── Holder count - MC-driven target with smooth convergence ────────────
     // Formula: ~10 * (MC/$1K)^0.75 gives realistic counts at every tier:
     //   $1K→~10  $69K→~254  $1M→~1.8K  $10M→~10K  $100M→~56K  $1B→~316K
     const mcInK = marketCap / 1000;
