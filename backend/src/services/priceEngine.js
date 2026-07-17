@@ -283,22 +283,7 @@ function _bootstrap(coin) {
   const startPrice = coin.currentPrice || 1e-7;
   const fate       = _assignFate();
   const ceiling    = _assignCeiling(fate);
-  const history    = [];
-  const now        = Date.now();
-  let p            = startPrice;
-
-  for (let i = 100; i >= 1; i--) {
-    const open   = p;
-    const change = (Math.random() - 0.48) * 0.03;
-    p            = Math.max(p * (1 + change), 1e-14);
-    history.push({
-      time:   Math.floor((now - i * TICK_MS) / 1000),
-      open, close: p,
-      high: Math.max(open, p) * (1 + Math.random() * 0.005),
-      low:  Math.min(open, p) * (1 - Math.random() * 0.005),
-      volume: Math.random() * 500,
-    });
-  }
+  const history    = []; // start empty — chart builds in real time
 
   state[coin.id] = {
     price:      startPrice,
