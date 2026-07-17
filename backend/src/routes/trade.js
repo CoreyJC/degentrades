@@ -98,9 +98,12 @@ router.post('/sell', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Insufficient holdings' });
     }
 
-    const currentPrice = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
-    const solReceived = coinAmount * currentPrice;
-    const newAmount = holding.amount - coinAmount;
+    const currentPrice  = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
+    const solReceived   = coinAmount * currentPrice;
+    const newAmount     = holding.amount - coinAmount;
+    const sellPnlPct    = holding.avgBuyPrice > 0
+      ? ((currentPrice - holding.avgBuyPrice) / holding.avgBuyPrice) * 100
+      : 0;
 
     await prisma.$transaction([
       prisma.portfolio.update({
@@ -117,12 +120,14 @@ router.post('/sell', authenticate, async (req, res) => {
           }),
       prisma.transaction.create({
         data: {
-          userId: req.userId,
+          userId:      req.userId,
           coinId,
-          type: 'SELL',
-          amount: coinAmount,
-          price: currentPrice,
-          solSpent: -solReceived,
+          type:        'SELL',
+          amount:      coinAmount,
+          price:       currentPrice,
+          solSpent:    -solReceived,
+          avgBuyPrice: holding.avgBuyPrice,
+          pnlPct:      sellPnlPct,
         },
       }),
     ]);

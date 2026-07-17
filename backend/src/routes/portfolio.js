@@ -43,4 +43,48 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/portfolio/trades — last 20 trades + win/loss stats
+router.get('/trades', authenticate, async (req, res) => {
+  try {
+    const txns = await prisma.transaction.findMany({
+      where:   { userId: req.userId },
+      include: { coin: { select: { ticker: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take:    100, // pull more to compute accurate stats
+    });
+
+    // Win/loss stats from all SELL transactions
+    const sells = txns.filter((t) => t.type === 'SELL' && t.pnlPct != null);
+    const wins  = sells.filter((t) => t.pnlPct > 0).length;
+    const losses = sells.filter((t) => t.pnlPct <= 0).length;
+    const total  = wins + losses;
+    const winRate = total > 0 ? (wins / total) * 100 : null;
+    const avgWinPct  = wins > 0
+      ? sells.filter(t => t.pnlPct > 0).reduce((s, t) => s + t.pnlPct, 0) / wins
+      : 0;
+    const avgLossPct = losses > 0
+      ? sells.filter(t => t.pnlPct <= 0).reduce((s, t) => s + t.pnlPct, 0) / losses
+      : 0;
+
+    // Last 20 trades (all types)
+    const last20 = txns.slice(0, 20).map((t) => ({
+      id:        t.id,
+      type:      t.type,
+      ticker:    t.coin.ticker,
+      name:      t.coin.name,
+      pnlPct:    t.pnlPct ?? null,
+      solSpent:  t.solSpent,
+      createdAt: t.createdAt,
+    }));
+
+    res.json({
+      stats: { wins, losses, total, winRate, avgWinPct, avgLossPct },
+      trades: last20,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

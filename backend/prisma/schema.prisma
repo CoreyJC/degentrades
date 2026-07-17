@@ -56,14 +56,16 @@ model Holding {
 }
 
 model Transaction {
-  id        String   @id @default(cuid())
-  userId    String
-  coinId    String
-  type      String   // BUY or SELL
-  amount    Float
-  price     Float
-  solSpent  Float
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coin      Coin     @relation(fields: [coinId], references: [id])
+  id          String   @id @default(cuid())
+  userId      String
+  coinId      String
+  type        String   // BUY or SELL
+  amount      Float
+  price       Float
+  solSpent    Float
+  avgBuyPrice Float?   // avg buy price at time of sell (for P&L calc)
+  pnlPct      Float?   // % gain/loss on this sell
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coin        Coin     @relation(fields: [coinId], references: [id])
 }

@@ -30,14 +30,19 @@ function fmt(p) {
 }
 
 export default function Portfolio() {
-  const { socket }   = useSocket();
-  const [data, setData] = useState(null);
+  const { socket }      = useSocket();
+  const [data, setData]       = useState(null);
+  const [tradeData, setTradeData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     try {
-      const { data } = await axios.get('/api/portfolio');
-      setData(data);
+      const [port, trades] = await Promise.all([
+        axios.get('/api/portfolio'),
+        axios.get('/api/portfolio/trades').catch(() => ({ data: null })),
+      ]);
+      setData(port.data);
+      setTradeData(trades.data);
       setLoading(false);
     } catch { setLoading(false); }
   }
@@ -165,6 +170,74 @@ export default function Portfolio() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Win/Loss Stats */}
+      {tradeData && (
+        <>
+          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3 mt-8">Trading Stats</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-white">{tradeData.stats.total}</div>
+              <div className="text-xs text-gray-500 mt-1">Total Sells</div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">{tradeData.stats.wins}</div>
+              <div className="text-xs text-gray-500 mt-1">Wins</div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-red-400">{tradeData.stats.losses}</div>
+              <div className="text-xs text-gray-500 mt-1">Losses</div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
+              <div className={`text-2xl font-bold ${tradeData.stats.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                {tradeData.stats.winRate != null ? `${tradeData.stats.winRate.toFixed(0)}%` : '—'}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Win Rate</div>
+            </div>
+          </div>
+
+          {/* Last 20 trades */}
+          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3">Recent Trades</h2>
+          {tradeData.trades.length === 0 ? (
+            <div className="text-gray-600 text-center py-8 border border-gray-800 rounded-xl">No trades yet</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
+              {tradeData.trades.map((t) => {
+                const isSell = t.type === 'SELL';
+                const hasPnl = t.pnlPct != null;
+                const up     = (t.pnlPct ?? 0) >= 0;
+                return (
+                  <div
+                    key={t.id}
+                    className={`rounded-xl border p-3 flex flex-col gap-1
+                      ${isSell
+                        ? up ? 'border-green-900 bg-green-950/30' : 'border-red-900 bg-red-950/30'
+                        : 'border-gray-800 bg-gray-900/40'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-sm">${t.ticker}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold
+                        ${isSell ? 'bg-red-900 text-red-300' : 'bg-green-900 text-green-300'}`}>
+                        {t.type}
+                      </span>
+                    </div>
+                    {isSell && hasPnl && (
+                      <div className={`text-sm font-mono font-bold ${up ? 'text-green-400' : 'text-red-400'}`}>
+                        {up ? '+' : ''}{t.pnlPct.toFixed(2)}%
+                      </div>
+                    )}
+                    {!isSell && (
+                      <div className="text-xs text-gray-500">
+                        {Math.abs(t.solSpent).toFixed(3)} SOL
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
