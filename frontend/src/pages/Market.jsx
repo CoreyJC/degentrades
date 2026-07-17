@@ -97,10 +97,10 @@ export default function Market() {
     .filter((c) => !c.migrated && getMC(c) >= ABOUT_TO_MIGRATE && getMC(c) < MIGRATION_THRESHOLD)
     .sort((a, b) => getMC(b) - getMC(a));
 
-  // ── 🚀 Just Migrated — migrated, sorted by migratedAt DESC (no cap, tokens keep moving)
+  // ── 🚀 Just Migrated — migrated OR MC >= $30k (orphaned in-flight), sorted by MC desc
   const justMigrated = filtered
-    .filter((c) => c.migrated)
-    .sort((a, b) => new Date(b.migratedAt ?? 0) - new Date(a.migratedAt ?? 0));
+    .filter((c) => c.migrated || getMC(c) >= MIGRATION_THRESHOLD)
+    .sort((a, b) => getMC(b) - getMC(a));
 
   if (error) return (
     <div className="max-w-4xl mx-auto p-8 text-red-400">Error: {error}</div>
