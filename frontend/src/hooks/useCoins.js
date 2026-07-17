@@ -9,8 +9,7 @@ export function useCoins(socket, pushToast) {
   const [error,       setError]       = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  const seedPrices   = useRef({});
-  const priceHistory = useRef({});
+  const seedPrices = useRef({});
 
   // ── Fetch / refresh ─────────────────────────────────────────────────────────
   const refresh = useCallback(() => {
@@ -41,13 +40,6 @@ export function useCoins(socket, pushToast) {
     if (!socket) return;
 
     function onPriceUpdate(updates) {
-      // Track last 30 prices per coin for sparklines
-      Object.entries(updates).forEach(([id, u]) => {
-        if (!priceHistory.current[id]) priceHistory.current[id] = [];
-        priceHistory.current[id].push(u.price);
-        if (priceHistory.current[id].length > 30) priceHistory.current[id].shift();
-      });
-
       setCoins((prev) =>
         prev.map((coin) => {
           const u = updates[coin.id];
@@ -102,5 +94,5 @@ export function useCoins(socket, pushToast) {
     };
   }, [socket, pushToast]);
 
-  return { coins, loading, error, refresh, lastRefresh, priceHistory };
+  return { coins, loading, error, refresh, lastRefresh };
 }
