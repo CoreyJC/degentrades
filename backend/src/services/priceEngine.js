@@ -228,6 +228,10 @@ function getAllPrices() {
   return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price]));
 }
 
+function getCreatedAt(coinId) {
+  return state[coinId]?.createdAt ?? null;
+}
+
 function getIo() { return io; }
 
 // ── Rug execution ──────────────────────────────────────────────────────────────
@@ -344,6 +348,6 @@ function stop() {
 module.exports = {
   start, stop,
   registerCoin, removeCoin,
-  getCurrentPrice, getHistory, getAllPrices,
+  getCurrentPrice, getHistory, getAllPrices, getCreatedAt,
   getIo,
 };

@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
         rugProbability: coin.rugProbability,
         migrated:      coin.migrated,
         migratedAt:    coin.migratedAt,
-        createdAt:     coin.createdAt,
+        createdAt:     coin.createdAt ?? priceEngine.getCreatedAt(coin.id),
         change24h,
       };
     });
