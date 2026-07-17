@@ -69,6 +69,7 @@ export default function CoinModal({ coinId, onClose }) {
   const [coin,      setCoin]      = useState(null);
   const [price,     setPrice]     = useState(null);
   const [loading,   setLoading]   = useState(true);
+  const [rugged,    setRugged]    = useState(false);
   const [solAmt,    setSolAmt]    = useState('');
   const [coinAmt,   setCoinAmt]   = useState('');
   const [portfolio, setPortfolio] = useState(null);
@@ -94,7 +95,7 @@ export default function CoinModal({ coinId, onClose }) {
 
         const [coinsRes, portRes] = await Promise.all(requests);
         const found = coinsRes.data.find((c) => c.id === coinId);
-        if (!found) { onClose(); return; }
+        if (!found) { setRugged(true); setLoading(false); return; }
         setCoin(found);
         setPrice(found.currentPrice);
 
@@ -249,6 +250,13 @@ export default function CoinModal({ coinId, onClose }) {
           <div className="p-6">
             {loading ? (
               <div className="text-gray-500 text-center py-20">Loading...</div>
+            ) : rugged ? (
+              <div className="text-center py-20">
+                <div className="text-6xl mb-4">💀</div>
+                <div className="text-white text-xl font-bold mb-2">RUGGED</div>
+                <div className="text-gray-500 text-sm">This token went to zero while you were looking at it.</div>
+                <button onClick={onClose} className="mt-6 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">Close</button>
+              </div>
             ) : !coin ? null : (
               <>
                 {/* Header */}
@@ -277,6 +285,7 @@ export default function CoinModal({ coinId, onClose }) {
                 <div
                   ref={chartElRef}
                   className="rounded-xl overflow-hidden border border-gray-800 mb-6"
+                  style={{ height: '280px' }}
                 />
 
                 {/* Buy / Sell panel */}
