@@ -393,6 +393,47 @@ function getCurrentPrice(coinId) { return state[coinId]?.price ?? null; }
 function getHistory(coinId) { return state[coinId]?.history ?? []; }
 function getAllPrices() { return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price])); }
 function getHolderCount(coinId) { return state[coinId]?.holderCount ?? 1; }
+
+/**
+ * Apply immediate price impact from a user trade.
+ * impactSol = SOL equivalent of the trade (positive = buy, negative = sell)
+ * Impact scales with trade size vs current market cap — small caps feel it hard.
+ */
+function applyTradeImpact(coinId, impactSol, isBuy) {
+  const s = state[coinId];
+  if (!s) return;
+
+  const marketCap = s.price * TOTAL_SUPPLY;
+  // 1 game SOL ≈ $1 in the sim economy; multiplier of 2.5 makes trades feel real
+  const rawImpact = Math.abs(impactSol) / marketCap * 2.5;
+  // Cap per-trade impact at 80% so a single buy can’t 10x instantly
+  const impactPct = Math.min(rawImpact, 0.80);
+
+  if (isBuy) {
+    s.price     = s.price * (1 + impactPct);
+    s.momentum  = Math.min(s.momentum + impactPct * 1.5, 1.0);
+    s.volatility = Math.min(s.volatility * (1 + impactPct * 0.5), 5.0);
+    // Buying a stalled coin wakes it up — you’re the catalyst
+    if (s.stalled && impactPct > 0.03) {
+      s.stalled = false;
+      if (s.fate !== 'bleeder') s.phase = 'pump';
+    }
+    if (s.price > s.ath) s.ath = s.price;
+  } else {
+    s.price     = Math.max(s.price * (1 - impactPct), 1e-14);
+    s.momentum  = Math.max(s.momentum - impactPct * 1.5, -1.0);
+    s.volatility = Math.min(s.volatility * (1 + impactPct * 0.3), 5.0);
+  }
+
+  // Broadcast the impact immediately so the chart updates in real-time
+  if (io) {
+    const newMC = s.price * TOTAL_SUPPLY;
+    io.emit('price_update', {
+      [coinId]: { id: coinId, price: s.price, marketCap: newMC, holderCount: s.holderCount },
+    });
+  }
+  prisma.coin.update({ where: { id: coinId }, data: { currentPrice: s.price } }).catch(() => {});
+}
 function getCreatedAt(coinId) { return state[coinId]?.createdAt ?? null; }
 function getIo() { return io; }
 
@@ -543,6 +584,6 @@ function stop() {
 module.exports = {
   start, stop,
   registerCoin, removeCoin,
-  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount,
+  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount, applyTradeImpact,
   getIo,
 };

@@ -65,10 +65,15 @@ router.post('/buy', authenticate, async (req, res) => {
       }),
     ]);
 
+    // Apply buy pressure to the market — your SOL going in pumps the price
+    priceEngine.applyTradeImpact(coinId, solAmount, true);
+    const newPrice = priceEngine.getCurrentPrice(coinId);
+
     res.json({
       success: true,
       coinsReceived,
       price: currentPrice,
+      newPrice,
       solSpent: solAmount,
       newSolBalance: portfolio.solBalance - solAmount,
     });
@@ -132,10 +137,15 @@ router.post('/sell', authenticate, async (req, res) => {
       }),
     ]);
 
+    // Apply sell pressure — your tokens hitting the market drops the price
+    priceEngine.applyTradeImpact(coinId, solReceived, false);
+    const newPrice = priceEngine.getCurrentPrice(coinId);
+
     res.json({
       success: true,
       coinsSold: coinAmount,
       price: currentPrice,
+      newPrice,
       solReceived,
     });
   } catch (err) {
