@@ -120,8 +120,20 @@ export default function Market() {
   const { socket }  = useSocket();
   const { push }    = useToast();
   const { coins, loading, error, refresh, lastRefresh } = useCoins(socket, push);
-  const [search, setSearch]         = useState('');
+  const [search, setSearch]               = useState('');
   const [selectedCoinId, setSelectedCoinId] = useState(null);
+  const [sortKey, setSortKey]               = useState('age-asc'); // default: oldest first
+
+  const SORTS = [
+    { key: 'age-asc',    label: '🕐 Oldest',   fn: (a, b) => new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0) },
+    { key: 'age-desc',   label: '🆕 Newest',   fn: (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0) },
+    { key: 'mc-desc',    label: '💰 MC High',  fn: (a, b) => getMC(b) - getMC(a) },
+    { key: 'mc-asc',     label: '📉 MC Low',   fn: (a, b) => getMC(a) - getMC(b) },
+    { key: 'gain-desc',  label: '🚀 Gainers',  fn: (a, b) => (b.change24h ?? 0) - (a.change24h ?? 0) },
+    { key: 'gain-asc',   label: '💀 Losers',   fn: (a, b) => (a.change24h ?? 0) - (b.change24h ?? 0) },
+  ];
+
+  const activeSortFn = SORTS.find((s) => s.key === sortKey)?.fn ?? SORTS[0].fn;
 
   const filtered = search
     ? coins.filter((c) =>
@@ -130,20 +142,20 @@ export default function Market() {
       )
     : coins;
 
-  // ── 🟢 New Tokens — not migrated, MC < $50k, oldest first
+  // ── 🟢 New Tokens — not migrated, MC < $50k
   const newTokens = filtered
     .filter((c) => !c.migrated && getMC(c) < ABOUT_TO_MIGRATE)
-    .sort((a, b) => new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0));
+    .sort(activeSortFn);
 
-  // ── 🔥 About to Migrate — not migrated, MC $50k–$69k
+  // ── 🔥 About to Migrate — not migrated, MC $50k–$69k (always closest to migration first, then secondary sort)
   const aboutToMigrate = filtered
     .filter((c) => !c.migrated && getMC(c) >= ABOUT_TO_MIGRATE && getMC(c) < MIGRATION_THRESHOLD)
-    .sort((a, b) => getMC(b) - getMC(a));
+    .sort(activeSortFn);
 
   // ── 🚀 Just Migrated — migrated OR MC >= $69k
   const justMigrated = filtered
     .filter((c) => c.migrated || getMC(c) >= MIGRATION_THRESHOLD)
-    .sort((a, b) => getMC(b) - getMC(a));
+    .sort(activeSortFn);
 
   if (error) return (
     <div className="max-w-4xl mx-auto p-8 text-red-400">Error: {error}</div>
@@ -195,6 +207,25 @@ export default function Market() {
             <StatCard label="Migrated"         value={justMigrated.length}   color="text-purple-400" />
           </div>
 
+          {/* Sort bar */}
+          <div className="flex items-center gap-2 mb-5 flex-wrap">
+            <span className="text-gray-600 text-xs uppercase tracking-wider mr-1">Sort:</span>
+            {SORTS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setSortKey(s.key)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-150
+                  ${
+                    sortKey === s.key
+                      ? 'bg-white text-gray-950 border-white'
+                      : 'bg-transparent text-gray-500 border-gray-700 hover:border-gray-500 hover:text-gray-300'
+                  }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
           {/* 3-column layout */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -204,7 +235,7 @@ export default function Market() {
                 emoji="🟢"
                 title="New Tokens"
                 count={newTokens.length}
-                subtitle="MC < $50K · Oldest first"
+                subtitle={`MC < $50K · ${SORTS.find(s => s.key === sortKey)?.label ?? 'Oldest'}`}
                 accentColor="text-green-400"
               />
               <div className="flex-1 max-h-[70vh] overflow-y-auto space-y-2 pr-1
