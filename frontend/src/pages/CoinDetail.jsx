@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createChart, ColorType, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
+import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useToast }  from '../context/ToastContext';
 
@@ -13,9 +14,46 @@ function fmt(p) {
   return `$${p.toFixed(4)}`;
 }
 
+function LoginGateModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
+        <div className="text-4xl mb-4">🔒</div>
+        <h2 className="text-xl font-bold text-white mb-2">Sign in to start trading</h2>
+        <p className="text-gray-400 text-sm mb-6">
+          Create a free account to buy and sell memecoins on DegenTrades.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Link
+            to="/register"
+            className="w-full py-2.5 rounded-lg font-semibold text-sm transition-colors"
+            style={{ backgroundColor: '#00ff88', color: '#0a0a0a' }}
+          >
+            Sign Up — It's Free
+          </Link>
+          <Link
+            to="/login"
+            className="w-full py-2.5 rounded-lg font-medium text-sm border border-gray-600
+              text-gray-300 hover:border-gray-400 hover:text-white transition-colors"
+          >
+            Login
+          </Link>
+          <button
+            onClick={onClose}
+            className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-1"
+          >
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CoinDetail() {
   const { id }       = useParams();
   const navigate     = useNavigate();
+  const { user }     = useAuth();
   const { socket }   = useSocket();
   const { push }     = useToast();
 
@@ -31,29 +69,33 @@ export default function CoinDetail() {
   const [portfolio,  setPortfolio]  = useState(null);
   const [holding,    setHolding]    = useState(null);
   const [busy,       setBusy]       = useState(false);
+  const [showGate,   setShowGate]   = useState(false);
 
-  // ── Load coin + portfolio ─────────────────────────────────────────────────
+  // ── Load coin (+ portfolio if logged in) ──────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
-        const [coinsRes, portRes] = await Promise.all([
-          axios.get('/api/coins'),
-          axios.get('/api/portfolio'),
-        ]);
+        const requests = [axios.get('/api/coins')];
+        if (user) requests.push(axios.get('/api/portfolio'));
+
+        const [coinsRes, portRes] = await Promise.all(requests);
         const found = coinsRes.data.find((c) => c.id === id);
         if (!found) { navigate('/'); return; }
         setCoin(found);
         setPrice(found.currentPrice);
-        setPortfolio(portRes.data);
-        const h = portRes.data.holdings.find((h) => h.coinId === id);
-        setHolding(h ?? null);
+
+        if (portRes) {
+          setPortfolio(portRes.data);
+          const h = portRes.data.holdings.find((h) => h.coinId === id);
+          setHolding(h ?? null);
+        }
         setLoading(false);
       } catch {
         navigate('/');
       }
     }
     load();
-  }, [id, navigate]);
+  }, [id, navigate, user]);
 
   // ── Chart ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -122,7 +164,13 @@ export default function CoinDetail() {
   }, [socket, id, navigate, push]);
 
   // ── Trades ────────────────────────────────────────────────────────────────
+  function requireAuth() {
+    if (!user) { setShowGate(true); return false; }
+    return true;
+  }
+
   async function buy() {
+    if (!requireAuth()) return;
     const sol = parseFloat(solAmt);
     if (!sol || sol <= 0) return push('Enter a valid SOL amount', 'error');
     setBusy(true);
@@ -139,6 +187,7 @@ export default function CoinDetail() {
   }
 
   async function sell() {
+    if (!requireAuth()) return;
     const amt = parseFloat(coinAmt);
     if (!amt || amt <= 0) return push('Enter a valid amount', 'error');
     setBusy(true);
@@ -164,6 +213,8 @@ export default function CoinDetail() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
+      {showGate && <LoginGateModal onClose={() => setShowGate(false)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -186,20 +237,26 @@ export default function CoinDetail() {
         {/* Buy */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <h3 className="font-semibold text-green-400 mb-3">Buy {coin.ticker}</h3>
-          <div className="text-xs text-gray-500 mb-2">
-            Balance: {portfolio?.solBalance.toFixed(4) ?? '—'} SOL
-          </div>
-          <div className="flex gap-2 mb-3">
-            {[25, 50, 100].map((pct) => (
-              <button
-                key={pct}
-                onClick={() => setSolAmt(((portfolio?.solBalance ?? 0) * pct / 100).toFixed(4))}
-                className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded"
-              >
-                {pct}%
-              </button>
-            ))}
-          </div>
+          {user ? (
+            <>
+              <div className="text-xs text-gray-500 mb-2">
+                Balance: {portfolio?.solBalance.toFixed(4) ?? '—'} SOL
+              </div>
+              <div className="flex gap-2 mb-3">
+                {[25, 50, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setSolAmt(((portfolio?.solBalance ?? 0) * pct / 100).toFixed(4))}
+                    className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-gray-600 mb-4">Sign in to see your balance</div>
+          )}
           <input
             type="number" min="0" step="any"
             placeholder="SOL amount"
@@ -218,14 +275,14 @@ export default function CoinDetail() {
             className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white
               font-semibold py-2 rounded-lg transition-colors"
           >
-            Buy
+            {user ? 'Buy' : '🔒 Sign in to Buy'}
           </button>
         </div>
 
         {/* Sell */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <h3 className="font-semibold text-red-400 mb-3">Sell {coin.ticker}</h3>
-          {holding ? (
+          {user && holding ? (
             <>
               <div className="text-xs text-gray-500 mb-1">
                 Holding: {holding.amount.toExponential(3)} {coin.ticker}
@@ -245,8 +302,10 @@ export default function CoinDetail() {
                 ))}
               </div>
             </>
-          ) : (
+          ) : user ? (
             <div className="text-xs text-gray-600 mb-4">You don't hold any {coin.ticker}</div>
+          ) : (
+            <div className="text-xs text-gray-600 mb-4">Sign in to trade {coin.ticker}</div>
           )}
           <input
             type="number" min="0" step="any"
@@ -262,11 +321,11 @@ export default function CoinDetail() {
             </div>
           )}
           <button
-            onClick={sell} disabled={busy || !holding}
+            onClick={sell} disabled={busy || (user && !holding)}
             className="w-full bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white
               font-semibold py-2 rounded-lg transition-colors"
           >
-            Sell
+            {user ? 'Sell' : '🔒 Sign in to Sell'}
           </button>
         </div>
       </div>

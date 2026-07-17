@@ -17,18 +17,17 @@ function ProtectedRoute({ children }) {
 }
 
 function AppInner() {
-  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-gray-950">
-      {user && <Nav />}
+      <Nav />
       <Routes>
-        <Route path="/login"    element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/" element={<ProtectedRoute><Market /></ProtectedRoute>} />
-        <Route path="/coin/:id" element={<ProtectedRoute><CoinDetail /></ProtectedRoute>} />
-        <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
-        <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/login"       element={<Login />} />
+        <Route path="/register"    element={<Register />} />
+        <Route path="/"            element={<Market />} />
+        <Route path="/coin/:id"    element={<CoinDetail />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/portfolio"   element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
+        <Route path="*"            element={<Navigate to="/" replace />} />
       </Routes>
     </div>
   );

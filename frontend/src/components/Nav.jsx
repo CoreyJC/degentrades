@@ -30,7 +30,7 @@ export default function Nav() {
         {/* Links */}
         <div className="flex items-center gap-1">
           {link('/',            '📈 Market')}
-          {link('/portfolio',   '💼 Portfolio')}
+          {user && link('/portfolio', '💼 Portfolio')}
           {link('/leaderboard', '🏆 Leaderboard')}
         </div>
 
@@ -41,13 +41,35 @@ export default function Nav() {
             className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-500'}`}
             title={connected ? 'Live' : 'Disconnected'}
           />
-          <span className="text-sm text-gray-400">{user?.username}</span>
-          <button
-            onClick={logout}
-            className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-          >
-            Logout
-          </button>
+
+          {user ? (
+            <>
+              <span className="text-sm text-gray-400">{user.username}</span>
+              <button
+                onClick={logout}
+                className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="text-sm font-medium text-gray-300 border border-gray-600
+                  hover:border-gray-400 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                style={{ backgroundColor: '#00ff88', color: '#0a0a0a' }}
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
