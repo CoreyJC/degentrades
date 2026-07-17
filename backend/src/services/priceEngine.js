@@ -486,17 +486,19 @@ async function tick() {
 
     const marketCap = next * TOTAL_SUPPLY;
 
-    // ── Holder count — grows on pumps, shrinks on dumps ──────────────────
+    // ── Holder count — MC-driven target with smooth convergence ────────────
+    // Formula: ~10 * (MC/$1K)^0.75 gives realistic counts at every tier:
+    //   $1K→~10  $69K→~254  $1M→~1.8K  $10M→~10K  $100M→~56K  $1B→~316K
+    const mcInK = marketCap / 1000;
+    const targetHolders = Math.max(1, Math.floor(
+      10 * Math.pow(mcInK, 0.75) * (0.85 + Math.random() * 0.30) // ±15% noise
+    ));
+    // On dumps, holders leave faster (panic selling)
     const pctChange = prev > 0 ? (next - prev) / prev : 0;
-    if (pctChange > 0.05) {
-      s.holderCount = Math.min(s.holderCount + Math.floor(1 + Math.random() * 5), 9999);
-    } else if (pctChange > 0.01) {
-      if (Math.random() < 0.4) s.holderCount = Math.min(s.holderCount + 1, 9999);
-    } else if (pctChange < -0.10) {
-      s.holderCount = Math.max(s.holderCount - Math.floor(1 + Math.random() * 4), 1);
-    } else if (pctChange < -0.03) {
-      if (Math.random() < 0.3) s.holderCount = Math.max(s.holderCount - 1, 1);
-    }
+    const convergenceRate = pctChange < -0.05 ? 0.25 : 0.12; // dump = faster exit
+    s.holderCount = Math.max(1, Math.round(
+      s.holderCount + (targetHolders - s.holderCount) * convergenceRate
+    ));
 
     updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, candle: candles[candles.length - 1] };
 
