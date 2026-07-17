@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { useToast }  from '../context/ToastContext';
 import { useCoins }  from '../hooks/useCoins';
+import CoinModal     from '../components/CoinModal';
 
 const TOTAL_SUPPLY       = 1_000_000_000;
 const MIGRATION_THRESHOLD = 30_000;  // $30K
@@ -32,14 +32,17 @@ function ChangeChip({ value }) {
   );
 }
 
-function CoinCard({ coin, showProgress = false, showBadge = false }) {
+function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
   const mc = getMC(coin);
   const progressPct = showProgress
     ? Math.min((mc / MIGRATION_THRESHOLD) * 100, 100).toFixed(1)
     : null;
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-600 transition-colors">
+    <div
+      className="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-600 transition-colors cursor-pointer"
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
@@ -48,12 +51,6 @@ function CoinCard({ coin, showProgress = false, showBadge = false }) {
           </div>
           <span className="text-gray-500 text-xs font-mono">${coin.ticker}</span>
         </div>
-        <Link
-          to={`/coin/${coin.id}`}
-          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium shrink-0"
-        >
-          Trade →
-        </Link>
       </div>
 
       <div className="flex items-center justify-between mb-2">
@@ -112,6 +109,7 @@ export default function Market() {
   const { push }    = useToast();
   const { coins, loading, error } = useCoins(socket, push);
   const [search, setSearch] = useState('');
+  const [selectedCoinId, setSelectedCoinId] = useState(null);
 
   const filtered = search
     ? coins.filter((c) =>
@@ -176,7 +174,7 @@ export default function Market() {
                 <div className="text-gray-600 text-sm text-center py-8">No new tokens</div>
               ) : (
                 newTokens.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} />
+                  <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
@@ -195,7 +193,7 @@ export default function Market() {
                 <div className="text-gray-600 text-sm text-center py-8">None approaching yet</div>
               ) : (
                 aboutToMigrate.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} showProgress />
+                  <CoinCard key={coin.id} coin={coin} showProgress onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
@@ -218,13 +216,17 @@ export default function Market() {
                 </div>
               ) : (
                 justMigrated.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} showBadge />
+                  <CoinCard key={coin.id} coin={coin} showBadge onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
           </div>
 
         </div>
+      )}
+
+      {selectedCoinId && (
+        <CoinModal coinId={selectedCoinId} onClose={() => setSelectedCoinId(null)} />
       )}
     </div>
   );
