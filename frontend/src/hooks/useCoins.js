@@ -81,31 +81,14 @@ export function useCoins(socket, pushToast) {
       pushToast?.(`💀 RUGGED: ${name} (${ticker})${priceStr}`, 'rug', 6000);
     }
 
-    // Coin migrated — graduated to next tier
-    function onCoinMigrated({ coinId, name, ticker, marketCap }) {
-      setCoins((prev) =>
-        prev.map((coin) =>
-          coin.id === coinId
-            ? { ...coin, migrated: true, migratedAt: new Date().toISOString() }
-            : coin
-        )
-      );
-      const mcStr = marketCap >= 1000
-        ? `$${(marketCap / 1000).toFixed(1)}K`
-        : `$${marketCap.toFixed(0)}`;
-      pushToast?.(`🚀 $${ticker} just migrated at ${mcStr} MC!`, 'pump', 7000);
-    }
-
     socket.on('price_update',  onPriceUpdate);
     socket.on('coin_added',    onCoinAdded);
     socket.on('coin_deleted',  onCoinDeleted);
-    socket.on('coin_migrated', onCoinMigrated);
 
     return () => {
       socket.off('price_update',  onPriceUpdate);
       socket.off('coin_added',    onCoinAdded);
       socket.off('coin_deleted',  onCoinDeleted);
-      socket.off('coin_migrated', onCoinMigrated);
     };
   }, [socket, pushToast]);
 

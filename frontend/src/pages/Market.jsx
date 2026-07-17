@@ -4,9 +4,8 @@ import { useToast }  from '../context/ToastContext';
 import { useCoins }  from '../hooks/useCoins';
 import CoinModal     from '../components/CoinModal';
 
-const TOTAL_SUPPLY       = 1_000_000_000;
-const MIGRATION_THRESHOLD = 30_000;  // $30K
-const ABOUT_TO_MIGRATE    = 20_000;  // $20K
+const TOTAL_SUPPLY = 1_000_000_000;
+const NEW_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Format market cap as abbreviated string: $1.2K, $24.5K, $1.2M */
 function fmtMC(mc) {
@@ -16,7 +15,7 @@ function fmtMC(mc) {
   return `$${mc.toFixed(0)}`;
 }
 
-/** Market cap from price */
+/** Market cap from coin */
 function getMC(coin) {
   return coin.marketCap ?? (coin.currentPrice * TOTAL_SUPPLY);
 }
@@ -32,11 +31,8 @@ function ChangeChip({ value }) {
   );
 }
 
-function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
+function CoinCard({ coin, onClick }) {
   const mc = getMC(coin);
-  const progressPct = showProgress
-    ? Math.min((mc / MIGRATION_THRESHOLD) * 100, 100).toFixed(1)
-    : null;
 
   return (
     <div
@@ -45,11 +41,8 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-white">{coin.name}</span>
-            {showBadge && <span className="text-base">🚀</span>}
-          </div>
-          <span className="text-gray-500 text-xs font-mono">${coin.ticker}</span>
+          <span className="font-bold text-white">{coin.name}</span>
+          <div className="text-gray-500 text-xs font-mono">${coin.ticker}</div>
         </div>
       </div>
 
@@ -58,35 +51,10 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
         <span className="text-white font-mono font-semibold">{fmtMC(mc)}</span>
       </div>
 
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-gray-400 text-xs">Change</span>
+      <div className="flex items-center justify-between">
+        <span className="text-gray-400 text-xs">24h Change</span>
         <ChangeChip value={coin.change24h ?? 0} />
       </div>
-
-      {showProgress && (
-        <div className="mt-3">
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Migration Progress</span>
-            <span>{progressPct}%</span>
-          </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div
-              className="bg-green-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-gray-600 mt-1">
-            <span>$20K</span>
-            <span>🎓 $30K</span>
-          </div>
-        </div>
-      )}
-
-      {showBadge && coin.migratedAt && (
-        <div className="mt-2 text-xs text-gray-600">
-          Migrated {new Date(coin.migratedAt).toLocaleTimeString()}
-        </div>
-      )}
     </div>
   );
 }
@@ -111,6 +79,8 @@ export default function Market() {
   const [search, setSearch] = useState('');
   const [selectedCoinId, setSelectedCoinId] = useState(null);
 
+  const now = Date.now();
+
   const filtered = search
     ? coins.filter((c) =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -118,18 +88,25 @@ export default function Market() {
       )
     : coins;
 
-  // ── Section buckets ──────────────────────────────────────────────────────────
-  const newTokens = filtered
-    .filter((c) => !c.migrated && getMC(c) < ABOUT_TO_MIGRATE)
+  // ── 🆕 New — created in last 5 min, newest first ─────────────────────────
+  const newCoins = filtered
+    .filter((c) => now - new Date(c.createdAt ?? 0).getTime() <= NEW_WINDOW_MS)
     .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
 
-  const aboutToMigrate = filtered
-    .filter((c) => !c.migrated && getMC(c) >= ABOUT_TO_MIGRATE && getMC(c) < MIGRATION_THRESHOLD)
-    .sort((a, b) => getMC(b) - getMC(a));
+  const newIds = new Set(newCoins.map((c) => c.id));
 
-  const justMigrated = filtered
-    .filter((c) => c.migrated)
-    .sort((a, b) => new Date(b.migratedAt ?? 0) - new Date(a.migratedAt ?? 0))
+  // ── 🔥 Pumping — top 20 by 24h gain, excludes New ────────────────────────
+  const pumping = filtered
+    .filter((c) => !newIds.has(c.id))
+    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
+    .slice(0, 20);
+
+  const pumpingIds = new Set(pumping.map((c) => c.id));
+
+  // ── 💀 Bleeding — top 20 by 24h loss, excludes New and Pumping ───────────
+  const bleeding = filtered
+    .filter((c) => !newIds.has(c.id) && !pumpingIds.has(c.id))
+    .sort((a, b) => (a.change24h ?? 0) - (b.change24h ?? 0))
     .slice(0, 20);
 
   if (error) return (
@@ -161,62 +138,58 @@ export default function Market() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* ── 🟢 New Tokens ───────────────────────────────────────────────── */}
+          {/* ── 🆕 New ───────────────────────────────────────────────────────── */}
           <div>
             <SectionHeader
-              emoji="🟢"
-              title="New Tokens"
-              count={`${newTokens.length} tokens`}
-              subtitle="MC < $20K · Newest first"
+              emoji="🆕"
+              title="New"
+              count={`${newCoins.length} tokens`}
+              subtitle="Just launched · Last 5 min"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {newTokens.length === 0 ? (
+              {newCoins.length === 0 ? (
                 <div className="text-gray-600 text-sm text-center py-8">No new tokens</div>
               ) : (
-                newTokens.map((coin) => (
+                newCoins.map((coin) => (
                   <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
           </div>
 
-          {/* ── 🔥 About to Migrate ─────────────────────────────────────────── */}
+          {/* ── 🔥 Pumping ───────────────────────────────────────────────────── */}
           <div>
             <SectionHeader
               emoji="🔥"
-              title="About to Migrate"
-              count={`${aboutToMigrate.length} tokens`}
-              subtitle="MC $20K–$30K · Closest to 🎓"
+              title="Pumping"
+              count={`${pumping.length} tokens`}
+              subtitle="Biggest gainers · 24h"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {aboutToMigrate.length === 0 ? (
-                <div className="text-gray-600 text-sm text-center py-8">None approaching yet</div>
+              {pumping.length === 0 ? (
+                <div className="text-gray-600 text-sm text-center py-8">No gainers yet</div>
               ) : (
-                aboutToMigrate.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} showProgress onClick={() => setSelectedCoinId(coin.id)} />
+                pumping.map((coin) => (
+                  <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
           </div>
 
-          {/* ── 🚀 Just Migrated ────────────────────────────────────────────── */}
+          {/* ── 💀 Bleeding ──────────────────────────────────────────────────── */}
           <div>
             <SectionHeader
-              emoji="🚀"
-              title="Just Migrated"
-              count={`${justMigrated.length} tokens`}
-              subtitle="Graduated · Most recent first"
+              emoji="💀"
+              title="Bleeding"
+              count={`${bleeding.length} tokens`}
+              subtitle="Biggest losers · 24h"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {justMigrated.length === 0 ? (
-                <div className="text-gray-600 text-sm text-center py-8">
-                  <div className="text-4xl mb-2">🎓</div>
-                  <div>No graduates yet</div>
-                  <div className="text-xs mt-1">First to $30K MC wins!</div>
-                </div>
+              {bleeding.length === 0 ? (
+                <div className="text-gray-600 text-sm text-center py-8">No losers yet</div>
               ) : (
-                justMigrated.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} showBadge onClick={() => setSelectedCoinId(coin.id)} />
+                bleeding.map((coin) => (
+                  <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>

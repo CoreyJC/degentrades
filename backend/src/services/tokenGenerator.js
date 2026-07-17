@@ -130,8 +130,6 @@ async function spawnCoin() {
         currentPrice:  coin.currentPrice,
         marketCap:     coin.currentPrice * 1_000_000_000,
         rugProbability: coin.rugProbability,
-        migrated:      false,
-        migratedAt:    null,
         createdAt:     coin.createdAt,
         change24h:     0,
       });
