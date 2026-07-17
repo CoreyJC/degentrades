@@ -90,7 +90,7 @@ export default function Market() {
   // ── 🟢 New Tokens — not migrated, MC < $20k, newest first
   const newTokens = filtered
     .filter((c) => !c.migrated && getMC(c) < ABOUT_TO_MIGRATE)
-    .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+    .sort((a, b) => new Date(a.createdAt ?? 0) - new Date(b.createdAt ?? 0)); // oldest first
 
   // ── 🔥 About to Migrate — not migrated, MC $20k–$30k
   const aboutToMigrate = filtered
@@ -137,7 +137,7 @@ export default function Market() {
               emoji="🟢"
               title="New Tokens"
               count={`${newTokens.length} tokens`}
-              subtitle="MC < $20K · Newest first"
+              subtitle="MC < $20K · Oldest first"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
               {newTokens.length === 0 ? (
