@@ -108,6 +108,17 @@ function _updatePhase(s) {
     if (athRatio < 0.15) s.phase = 'dying'; // need 85% off ATH to enter death spiral
   }
   // dying is terminal — no transitions out
+
+  // ── Stall wakeup — random chance a stalled coin gets noticed ─────────────
+  if (s.stalled) {
+    const wakeupChance = s.fate === 'runner'  ? 0.030
+                       : s.fate === 'pumper' ? 0.018
+                       :                       0.007; // bleeders rarely wake
+    if (Math.random() < wakeupChance) {
+      s.stalled  = false;
+      if (s.fate !== 'bleeder') s.phase = 'pump'; // jumps straight to pump
+    }
+  }
 }
 
 // ── Probability tables per phase ───────────────────────────────────────────────
@@ -115,6 +126,45 @@ function _updatePhase(s) {
 function _nextPrice(coinId, s) {
   const { price: p, phase, fate, momentum } = s;
   const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
+
+  // ── NEWBORN — sniper/bot front-run on launch (first 6 ticks ≈ 12 seconds) ─
+  if (s.newbornTicks > 0) {
+    const tick = s.newbornTicks; // 6 down to 1
+    s.newbornTicks--;
+    if (tick >= 5) {
+      // Ticks 6+5: initial sniper spike — scaled by fate
+      const base = fate === 'runner' ? _rand(0.40, 0.90)
+                 : fate === 'pumper' ? _rand(0.20, 0.55)
+                 :                     _rand(0.08, 0.28); // bleeder gets smaller spike
+      s.momentum = Math.min(s.momentum + 0.5, 1.0);
+      s.holderCount = Math.min(s.holderCount + Math.floor(1 + Math.random() * 4), 9999);
+      return p * (1 + base);
+    } else if (tick >= 3) {
+      // Ticks 4+3: follow-through or first cracks
+      if (fate !== 'bleeder' && Math.random() < 0.65) {
+        const pump = _rand(0.04, 0.18);
+        s.momentum = Math.min(s.momentum + 0.15, 1.0);
+        s.holderCount = Math.min(s.holderCount + Math.floor(Math.random() * 3), 9999);
+        return p * (1 + pump);
+      }
+      // First profit-taking
+      const dump = _rand(0.05, 0.18);
+      s.momentum = Math.max(s.momentum - 0.2, -1.0);
+      return Math.max(p * (1 - dump), 1e-14);
+    } else {
+      // Ticks 2+1: correction / consolidation after spike
+      const dump = fate === 'bleeder' ? _rand(0.08, 0.25) : _rand(0.03, 0.12);
+      s.momentum = Math.max(s.momentum - 0.15, -1.0);
+      return Math.max(p * (1 - dump), 1e-14);
+    }
+  }
+
+  // ── STALLED — coin is flat and looks dead; rare chance to wake up ─────────
+  if (s.stalled) {
+    const pct = _rand(0.001, 0.004);
+    const dir = Math.random() < 0.48 ? -1 : 1; // very slight downward drift
+    return Math.max(p * (1 + dir * pct), 1e-14);
+  }
 
   // ── EARLY — quiet accumulation, tiny moves, no rugs ──────────────────────
   if (phase === 'early') {
@@ -286,21 +336,30 @@ function _bootstrap(coin) {
   const ceiling    = _assignCeiling(fate);
   const history    = []; // start empty — chart builds in real time
 
+  // Stall probability by fate — bleeders go flat most of the time
+  const stallProb = fate === 'bleeder' ? 0.62 : fate === 'pumper' ? 0.28 : 0.10;
+
   state[coin.id] = {
-    price:      startPrice,
+    price:       startPrice,
     startPrice,
-    ath:        startPrice,
+    ath:         startPrice,
     fate,
     ceiling,
-    phase:      'early',
-    momentum:   0,
-    volatility: 1.0,
-    createdAt:  coin.createdAt ?? new Date(),
-    migrated:   coin.migrated ?? false,
+    phase:       'early',
+    momentum:    0,
+    volatility:  1.0,
+    createdAt:   coin.createdAt ?? new Date(),
+    migrated:    coin.migrated ?? false,
     history,
-    name:       coin.name,
-    ticker:     coin.ticker,
+    name:        coin.name,
+    ticker:      coin.ticker,
     baseRugProb: coin.rugProbability ?? 0.007,
+    // Sniper spike: first N ticks are forced launch candles
+    newbornTicks: 6,
+    // Stall: coin goes sideways and looks dead until it wakes up or dies
+    stalled:     Math.random() < stallProb,
+    // Simulated holder count
+    holderCount: Math.floor(1 + Math.random() * 2), // 1–3 at birth
   };
 }
 
@@ -333,6 +392,7 @@ function removeCoin(coinId) { delete state[coinId]; }
 function getCurrentPrice(coinId) { return state[coinId]?.price ?? null; }
 function getHistory(coinId) { return state[coinId]?.history ?? []; }
 function getAllPrices() { return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price])); }
+function getHolderCount(coinId) { return state[coinId]?.holderCount ?? 1; }
 function getCreatedAt(coinId) { return state[coinId]?.createdAt ?? null; }
 function getIo() { return io; }
 
@@ -425,7 +485,20 @@ async function tick() {
     }
 
     const marketCap = next * TOTAL_SUPPLY;
-    updates[coinId] = { id: coinId, price: next, marketCap, candle: candles[candles.length - 1] };
+
+    // ── Holder count — grows on pumps, shrinks on dumps ──────────────────
+    const pctChange = prev > 0 ? (next - prev) / prev : 0;
+    if (pctChange > 0.05) {
+      s.holderCount = Math.min(s.holderCount + Math.floor(1 + Math.random() * 5), 9999);
+    } else if (pctChange > 0.01) {
+      if (Math.random() < 0.4) s.holderCount = Math.min(s.holderCount + 1, 9999);
+    } else if (pctChange < -0.10) {
+      s.holderCount = Math.max(s.holderCount - Math.floor(1 + Math.random() * 4), 1);
+    } else if (pctChange < -0.03) {
+      if (Math.random() < 0.3) s.holderCount = Math.max(s.holderCount - 1, 1);
+    }
+
+    updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, candle: candles[candles.length - 1] };
 
     // Migration check
     if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
@@ -468,6 +541,6 @@ function stop() {
 module.exports = {
   start, stop,
   registerCoin, removeCoin,
-  getCurrentPrice, getHistory, getAllPrices, getCreatedAt,
+  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount,
   getIo,
 };

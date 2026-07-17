@@ -40,6 +40,8 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
     : ageMs < 3_600_000
       ? `${Math.floor(ageMs / 60_000)}m`
       : `${Math.floor(ageMs / 3_600_000)}h`;
+  const holders = coin.holderCount ?? 1;
+  const bondingPct = Math.min((mc / MIGRATION_THRESHOLD) * 100, 100);
 
   return (
     <div
@@ -65,13 +67,42 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
         </span>
       </div>
 
-      {/* Market cap — big and prominent */}
-      <div className="mb-3">
-        <div className="text-xs text-gray-600 uppercase tracking-wider mb-1">Market Cap</div>
-        <div className={`text-xl font-mono font-bold ${isUp ? 'text-green-400' : 'text-white'}`}>
-          {fmtMC(mc)}
+      {/* Market cap + holders row */}
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <div className="text-xs text-gray-600 uppercase tracking-wider mb-1">Market Cap</div>
+          <div className={`text-xl font-mono font-bold ${isUp ? 'text-green-400' : 'text-white'}`}>
+            {fmtMC(mc)}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-gray-600 uppercase tracking-wider mb-1">Holders</div>
+          <div className="text-sm font-mono text-gray-300">👥 {holders.toLocaleString()}</div>
         </div>
       </div>
+
+      {/* Bonding curve progress — always shown */}
+      {!showBadge && (
+        <div className="mb-3">
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>Bonding curve</span>
+            <span className={bondingPct >= 72 ? 'text-yellow-400' : 'text-gray-500'}>
+              {bondingPct.toFixed(1)}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-1">
+            <div
+              className="h-1 rounded-full transition-all duration-500"
+              style={{
+                width: `${bondingPct}%`,
+                background: bondingPct >= 72
+                  ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
+                  : 'linear-gradient(90deg, #22c55e, #3b82f6)',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Bottom row: age + badge */}
       <div className="flex items-center justify-between text-xs text-gray-600">
@@ -79,27 +110,24 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
         {showBadge && <span className="text-purple-400 font-semibold">🚀 Migrated</span>}
       </div>
 
-      {/* Migration progress bar */}
-      {showProgress && (() => {
-        const pct = Math.min((mc / MIGRATION_THRESHOLD) * 100, 100);
-        return (
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-gray-600 mb-1">
-              <span>Migration</span>
-              <span className="text-yellow-400">{pct.toFixed(0)}%</span>
-            </div>
-            <div className="w-full bg-gray-800 rounded-full h-1.5">
-              <div
-                className="h-1.5 rounded-full transition-all duration-500"
-                style={{
-                  width: `${pct}%`,
-                  background: 'linear-gradient(90deg, #22c55e, #f59e0b)',
-                }}
-              />
-            </div>
+      {/* Enhanced progress bar for "about to migrate" */}
+      {showProgress && (
+        <div className="mt-3">
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>Migration</span>
+            <span className="text-yellow-400 font-bold">{bondingPct.toFixed(0)}%</span>
           </div>
-        );
-      })()}
+          <div className="w-full bg-gray-800 rounded-full h-2">
+            <div
+              className="h-2 rounded-full transition-all duration-500"
+              style={{
+                width: `${bondingPct}%`,
+                background: 'linear-gradient(90deg, #f59e0b, #ef4444)',
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -170,7 +198,7 @@ export default function Market() {
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Memecoin Market</h1>
           <p className="text-gray-600 text-sm mt-1">
-            Live prices · New tokens every 30s
+            Live prices · New token every 10s · {coins.length} live
           </p>
         </div>
         <div className="flex items-center gap-2">
