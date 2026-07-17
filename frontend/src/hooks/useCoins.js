@@ -48,7 +48,7 @@ export function useCoins(socket, pushToast) {
           const change24h = seed > 0
             ? parseFloat((((u.price - seed) / seed) * 100).toFixed(2))
             : 0;
-          return { ...coin, currentPrice: u.price, marketCap: u.marketCap ?? u.price * TOTAL_SUPPLY, change24h, holderCount: u.holderCount ?? coin.holderCount };
+          return { ...coin, currentPrice: u.price, marketCap: u.marketCap ?? u.price * TOTAL_SUPPLY, change24h, holderCount: u.holderCount ?? coin.holderCount, topHolderPct: u.topHolderPct ?? coin.topHolderPct, isBundled: u.isBundled ?? coin.isBundled };
         })
       );
     }

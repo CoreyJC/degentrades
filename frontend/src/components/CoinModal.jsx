@@ -496,8 +496,20 @@ export default function CoinModal({ coinId, onClose }) {
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-mono font-bold text-white">{fmt(price)}</div>
-                    <div className="flex items-center gap-2 justify-end mt-0.5">
+                    <div className="flex items-center gap-2 justify-end mt-0.5 flex-wrap">
                       <span className="text-xs text-gray-500">MC {fmtMC(mc)}</span>
+                      {coin.topHolderPct != null && (() => {
+                        const t = coin.topHolderPct;
+                        const risk = t >= 80 ? { icon: '💀', label: 'BUNDLED', color: 'text-red-500 bg-red-950' }
+                                   : t >= 50 ? { icon: '⚠️', label: `Top ${t.toFixed(0)}%`, color: 'text-orange-400 bg-orange-950' }
+                                   : t >= 20 ? { icon: '👀', label: `Top ${t.toFixed(0)}%`, color: 'text-yellow-400 bg-yellow-950' }
+                                   :           { icon: '✅', label: `Top ${t.toFixed(0)}%`, color: 'text-green-400 bg-green-950' };
+                        return (
+                          <span className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${risk.color}`}>
+                            {risk.icon} {risk.label}
+                          </span>
+                        );
+                      })()}
                       <span className={`text-xs font-mono font-semibold px-1.5 py-0.5 rounded
                         ${(coin.change24h ?? 0) >= 0 ? 'text-green-400 bg-green-950' : 'text-red-400 bg-red-950'}`}>
                         {(coin.change24h ?? 0) >= 0 ? '+' : ''}{(coin.change24h ?? 0).toFixed(2)}%

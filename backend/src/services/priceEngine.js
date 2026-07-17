@@ -121,9 +121,9 @@ function _updatePhase(s) {
         s.fate === 'pumper'  ? 0.40 :
         /* bleeder */          0.20;
       if (Math.random() < continuationChance) {
-        s.phase = 'pump'; // bulls win — continuation
+        s.phase = 'pump'; // bulls win - continuation
       } else {
-        s.phase = 'distribution'; // bears win — roll over
+        s.phase = 'distribution'; // bears win - roll over
       }
       s.consolidationStart = null;
     }
@@ -248,7 +248,9 @@ function _nextPrice(coinId, s) {
 
   // ── PUMP phase ────────────────────────────────────────────────────────────
   if (phase === 'pump') {
-    const rugBase = fate === 'runner' ? 0.002 : fate === 'pumper' ? 0.005 : 0.010;
+    // Bundled coins rug 3-4x more often in pump phase - dev is waiting to dump
+    const bundledMult = s.isBundled ? 3.5 : 1.0;
+    const rugBase = (fate === 'runner' ? 0.002 : fate === 'pumper' ? 0.005 : 0.010) * bundledMult;
 
     // Rug
     t += rugBase;
@@ -400,6 +402,13 @@ function _bootstrap(coin) {
   // Stall probability by fate - bleeders go flat most of the time
   const stallProb = fate === 'bleeder' ? 0.62 : fate === 'pumper' ? 0.28 : 0.10;
 
+  // ~20% of coins are bundled - dev bought with many wallets, high concentration
+  const isBundled = Math.random() < 0.20;
+  // Top holder % - starts high for bundled, organic for others
+  const topHolderPct = isBundled
+    ? 60 + Math.random() * 30        // 60-90% dev-controlled
+    : 5  + Math.random() * 25;       // 5-30% organic
+
   state[coin.id] = {
     price:       startPrice,
     startPrice,
@@ -419,8 +428,12 @@ function _bootstrap(coin) {
     newbornTicks: 6,
     // Stall: coin goes sideways and looks dead until it wakes up or dies
     stalled:     Math.random() < stallProb,
-    // Simulated holder count
-    holderCount:        Math.floor(1 + Math.random() * 2), // 1-3 at birth
+    // Simulated holder count - bundled coins start with fake inflated numbers
+    holderCount:        isBundled
+      ? Math.floor(80 + Math.random() * 400)   // 80-480 fake wallets
+      : Math.floor(1  + Math.random() * 2),    // 1-3 organic
+    isBundled,
+    topHolderPct,
     consolidationStart: null,
   };
 }
@@ -454,7 +467,9 @@ function removeCoin(coinId) { delete state[coinId]; }
 function getCurrentPrice(coinId) { return state[coinId]?.price ?? null; }
 function getHistory(coinId) { return state[coinId]?.history ?? []; }
 function getAllPrices() { return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price])); }
-function getHolderCount(coinId) { return state[coinId]?.holderCount ?? 1; }
+function getHolderCount(coinId)   { return state[coinId]?.holderCount ?? 1; }
+function getTopHolderPct(coinId)  { return state[coinId]?.topHolderPct ?? 50; }
+function getIsBundled(coinId)     { return state[coinId]?.isBundled ?? false; }
 
 /**
  * Apply immediate price impact from a user trade.
@@ -601,7 +616,13 @@ async function tick() {
 
     const marketCap = next * TOTAL_SUPPLY;
 
-    // ── Holder count - MC-driven target with smooth convergence ────────────
+    // ── Top holder % — dilutes slowly as coin pumps organically; bundled barely moves
+    if (pctChange > 0.03 && s.topHolderPct > 1) {
+      const dilution = s.isBundled ? 0.05 : 0.30; // bundled: dev holds, organic: spreads out
+      s.topHolderPct = Math.max(1, s.topHolderPct - pctChange * dilution * 100);
+    }
+
+    // ── Holder count — MC-driven target with smooth convergence ────────────
     // Formula: ~10 * (MC/$1K)^0.75 gives realistic counts at every tier:
     //   $1K→~10  $69K→~254  $1M→~1.8K  $10M→~10K  $100M→~56K  $1B→~316K
     const mcInK = marketCap / 1000;
@@ -615,7 +636,7 @@ async function tick() {
       s.holderCount + (targetHolders - s.holderCount) * convergenceRate
     ));
 
-    updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, candle: candles[candles.length - 1] };
+    updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, topHolderPct: parseFloat(s.topHolderPct.toFixed(1)), isBundled: s.isBundled, candle: candles[candles.length - 1] };
 
     // Migration check
     if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
@@ -658,6 +679,6 @@ function stop() {
 module.exports = {
   start, stop,
   registerCoin, removeCoin,
-  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount, applyTradeImpact,
+  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount, getTopHolderPct, getIsBundled, applyTradeImpact,
   getIo,
 };

@@ -40,8 +40,11 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
     : ageMs < 3_600_000
       ? `${Math.floor(ageMs / 60_000)}m`
       : `${Math.floor(ageMs / 3_600_000)}h`;
-  const holders = coin.holderCount ?? 1;
-  const bondingPct = Math.min((mc / MIGRATION_THRESHOLD) * 100, 100);
+  const holders      = coin.holderCount ?? 1;
+  const topPct        = coin.topHolderPct ?? 50;
+  const bondingPct    = Math.min((mc / MIGRATION_THRESHOLD) * 100, 100);
+  const holderRisk    = topPct >= 80 ? 'skull' : topPct >= 50 ? 'high' : topPct >= 20 ? 'mid' : 'low';
+  const holderRiskColor = holderRisk === 'skull' ? 'text-red-500' : holderRisk === 'high' ? 'text-orange-400' : holderRisk === 'mid' ? 'text-yellow-400' : 'text-green-400';
 
   return (
     <div
@@ -77,7 +80,10 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
         </div>
         <div className="text-right">
           <div className="text-xs text-gray-600 uppercase tracking-wider mb-1">Holders</div>
-          <div className="text-sm font-mono text-gray-300">👥 {holders.toLocaleString()}</div>
+          <div className="text-sm font-mono text-gray-300">{holders.toLocaleString()}</div>
+          <div className={`text-xs font-mono mt-0.5 ${holderRiskColor}`}>
+            {holderRisk === 'skull' ? '💀' : holderRisk === 'high' ? '⚠️' : holderRisk === 'mid' ? '👀' : '✅'} top {topPct.toFixed(0)}%
+          </div>
         </div>
       </div>
 

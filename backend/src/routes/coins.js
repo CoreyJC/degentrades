@@ -34,7 +34,9 @@ router.get('/', async (req, res) => {
         migratedAt:    coin.migratedAt,
         createdAt:     coin.createdAt ?? priceEngine.getCreatedAt(coin.id),
         change24h,
-        holderCount:   priceEngine.getHolderCount(coin.id),
+        holderCount:    priceEngine.getHolderCount(coin.id),
+        topHolderPct:   parseFloat((priceEngine.getTopHolderPct?.(coin.id) ?? 0).toFixed(1)),
+        isBundled:      priceEngine.getIsBundled?.(coin.id) ?? false,
       };
     });
 
