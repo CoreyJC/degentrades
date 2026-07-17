@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  username     String        @unique
+  createdAt    DateTime      @default(now())
+  portfolio    Portfolio?
+  holdings     Holding[]
+  transactions Transaction[]
+}
+
+model Portfolio {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  solBalance  Float    @default(100.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Coin {
+  id             String        @id @default(cuid())
+  name           String
+  ticker         String        @unique
+  currentPrice   Float
+  marketCap      Float         @default(0)
+  rugProbability Float         @default(0.005)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  holdings       Holding[]
+  transactions   Transaction[]
+}
+
+model Holding {
+  id           String   @id @default(cuid())
+  userId       String
+  coinId       String
+  amount       Float    @default(0)
+  avgBuyPrice  Float    @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coin         Coin     @relation(fields: [coinId], references: [id])
+
+  @@unique([userId, coinId])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  coinId    String
+  type      String   // BUY or SELL
+  amount    Float
+  price     Float
+  solSpent  Float
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coin      Coin     @relation(fields: [coinId], references: [id])
+}
