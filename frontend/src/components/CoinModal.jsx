@@ -313,7 +313,8 @@ export default function CoinModal({ coinId, onClose }) {
     setBusy(true);
     try {
       const { data } = await axios.post('/api/trade/buy', { coinId, solAmount: sol });
-      push(`✅ Bought ${data.coinsReceived.toExponential(3)} ${coin.ticker}`, 'success');
+      const mcAfterBuy = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
+      push(`✅ Bought ${coin.ticker} · MC ${fmtMC(mcAfterBuy)}`, 'success');
       setSolAmt('');
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);
@@ -330,7 +331,8 @@ export default function CoinModal({ coinId, onClose }) {
     setBusy(true);
     try {
       const { data } = await axios.post('/api/trade/sell', { coinId, coinAmount: amt });
-      push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived.toFixed(4)} SOL`, 'success');
+      const mcAfterSell = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
+      push(`💰 Sold ${coin.ticker} · MC ${fmtMC(mcAfterSell)} · +${data.solReceived.toFixed(4)} SOL`, 'success');
       setCoinAmt('');
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);
