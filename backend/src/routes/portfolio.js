@@ -9,10 +9,17 @@ const router = express.Router();
 router.get('/', authenticate, async (req, res) => {
   try {
     const portfolio = await prisma.portfolio.findUnique({ where: { userId: req.userId } });
+    // Only include holdings for ACTIVE coins — rugged coins should have been cleaned
+    // up by _rugCoin, but filter here as a safety net for any that slipped through
     const holdings = await prisma.holding.findMany({
-      where: { userId: req.userId },
+      where: { userId: req.userId, coin: { isActive: true } },
       include: { coin: true },
     });
+
+    // Silently purge any orphaned holdings for rugged/inactive coins
+    await prisma.holding.deleteMany({
+      where: { userId: req.userId, coin: { isActive: false } },
+    }).catch(() => {});
 
     const enrichedHoldings = holdings.map((h) => {
       const currentPrice = priceEngine.getCurrentPrice(h.coinId) || h.coin.currentPrice;
