@@ -138,6 +138,13 @@ export default function CoinModal({ coinId, onClose }) {
           crosshair:       { mode: CrosshairMode.Normal },
           rightPriceScale: { borderColor: '#1f2937' },
           timeScale:       { borderColor: '#1f2937', timeVisible: true },
+          localization:    {
+            priceFormatter: (p) => {
+              if (p >= 1_000_000) return `$${(p / 1_000_000).toFixed(2)}M`;
+              if (p >= 1_000)    return `$${(p / 1_000).toFixed(1)}K`;
+              return `$${p.toFixed(0)}`;
+            },
+          },
           autoSize:        true,
           height:          340,
         });
@@ -174,18 +181,26 @@ export default function CoinModal({ coinId, onClose }) {
         axios.get(`/api/coins/${coinId}/history`)
           .then(({ data }) => {
             if (seriesRef.current) {
-              series.setData(data);
-              // Volume bars (green/red matching candle direction)
+              // Convert price → market cap for chart display
+              const mcData = data.map((c) => ({
+                ...c,
+                open:  c.open  * TOTAL_SUPPLY,
+                high:  c.high  * TOTAL_SUPPLY,
+                low:   c.low   * TOTAL_SUPPLY,
+                close: c.close * TOTAL_SUPPLY,
+              }));
+              series.setData(mcData);
+              // Volume bars
               const volData = data.map((c) => ({
                 time:  c.time,
                 value: c.volume,
                 color: c.close >= c.open ? '#00ff8855' : '#ff3b3b55',
               }));
               volumeRef.current?.setData(volData);
-              // SMA
-              const smaData = calcSMA(data);
+              // SMA on MC values
+              const smaData = calcSMA(mcData);
               smaRef.current?.setData(smaData);
-              candleCache.current = data;
+              candleCache.current = mcData;
               chart.timeScale().fitContent();
             }
           })
@@ -219,28 +234,34 @@ export default function CoinModal({ coinId, onClose }) {
       setPrice(u.price);
       setCoin((prev) => prev ? { ...prev, currentPrice: u.price } : prev);
       if (seriesRef.current && u.candle) {
-        seriesRef.current.update(u.candle);
-        // Update volume bar
+        // Convert to MC for chart
+        const mcCandle = {
+          ...u.candle,
+          open:  u.candle.open  * TOTAL_SUPPLY,
+          high:  u.candle.high  * TOTAL_SUPPLY,
+          low:   u.candle.low   * TOTAL_SUPPLY,
+          close: u.candle.close * TOTAL_SUPPLY,
+        };
+        seriesRef.current.update(mcCandle);
         if (volumeRef.current) {
           volumeRef.current.update({
-            time:  u.candle.time,
+            time:  mcCandle.time,
             value: u.candle.volume,
-            color: u.candle.close >= u.candle.open ? '#00ff8855' : '#ff3b3b55',
+            color: mcCandle.close >= mcCandle.open ? '#00ff8855' : '#ff3b3b55',
           });
         }
-        // Update SMA: patch last candle in cache then recalc tail
         const cache = candleCache.current;
         const last  = cache[cache.length - 1];
-        if (last && last.time === u.candle.time) {
-          cache[cache.length - 1] = u.candle;
+        if (last && last.time === mcCandle.time) {
+          cache[cache.length - 1] = mcCandle;
         } else {
-          cache.push(u.candle);
+          cache.push(mcCandle);
           if (cache.length > 500) cache.shift();
         }
         if (smaRef.current && cache.length >= 20) {
-          const slice  = cache.slice(-20);
-          const avg    = slice.reduce((s, x) => s + x.close, 0) / 20;
-          smaRef.current.update({ time: u.candle.time, value: avg });
+          const slice = cache.slice(-20);
+          const avg   = slice.reduce((s, x) => s + x.close, 0) / 20;
+          smaRef.current.update({ time: mcCandle.time, value: avg });
         }
       }
     }
