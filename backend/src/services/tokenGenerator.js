@@ -104,7 +104,7 @@ async function spawnCoin() {
     const ticker         = await uniqueTicker(tickerBase);
     const currentPrice   = randomStartingPrice();
     const rugProbability = randomRugProbability();
-    const marketCap      = currentPrice * (1_000_000 + Math.random() * 9_000_000);
+    const marketCap      = currentPrice * 1_000_000_000;
 
     const coin = await prisma.coin.create({
       data: {
@@ -128,8 +128,11 @@ async function spawnCoin() {
         name:          coin.name,
         ticker:        coin.ticker,
         currentPrice:  coin.currentPrice,
-        marketCap:     coin.marketCap,
+        marketCap:     coin.currentPrice * 1_000_000_000,
         rugProbability: coin.rugProbability,
+        migrated:      false,
+        migratedAt:    null,
+        createdAt:     coin.createdAt,
         change24h:     0,
       });
     }

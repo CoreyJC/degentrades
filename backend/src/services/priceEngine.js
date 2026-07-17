@@ -16,9 +16,11 @@
 
 const prisma = require('../lib/prisma');
 
-const MAX_CANDLES   = 500;
-const TICK_MS       = 2000;
-const RUG_THRESHOLD = 0.0000001;
+const MAX_CANDLES          = 500;
+const TICK_MS              = 2000;
+const RUG_THRESHOLD        = 0.0000001;
+const TOTAL_SUPPLY         = 1_000_000_000;
+const MIGRATION_THRESHOLD  = 30_000; // $30K market cap
 
 // Base rug probability range per tick (0.5%–1%)
 const RUG_PROB_MIN = 0.005;
@@ -110,6 +112,9 @@ function _bootstrap(coin) {
     baseRugProb,
     createdAt:     coin.createdAt ?? new Date(),
     history,
+    migrated:      coin.migrated ?? false,
+    name:          coin.name,
+    ticker:        coin.ticker,
   };
 }
 
@@ -128,6 +133,9 @@ function registerCoin(coin) {
   // Override with the exact starting price from DB
   state[coin.id].price     = coin.currentPrice;
   state[coin.id].createdAt = coin.createdAt ?? new Date();
+  state[coin.id].migrated  = coin.migrated ?? false;
+  state[coin.id].name      = coin.name;
+  state[coin.id].ticker    = coin.ticker;
 }
 
 function removeCoin(coinId) {
@@ -221,7 +229,24 @@ async function tick() {
       if (candles.length > MAX_CANDLES) candles.shift();
     }
 
-    updates[coinId] = { id: coinId, price: next, candle: candles[candles.length - 1] };
+    const marketCap = next * TOTAL_SUPPLY;
+    updates[coinId] = { id: coinId, price: next, marketCap, candle: candles[candles.length - 1] };
+
+    // Check migration threshold
+    if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
+      s.migrated = true;
+      const migratedAt = new Date();
+      const { name, ticker } = s;
+      // Persist to DB (fire-and-forget)
+      prisma.coin
+        .update({ where: { id: coinId }, data: { migrated: true, migratedAt } })
+        .catch((err) => console.error(`Migration DB update failed for ${coinId}:`, err.message));
+      // Emit migration event
+      if (io) {
+        io.emit('coin_migrated', { coinId, name, ticker, marketCap });
+      }
+      console.log(`🚀 MIGRATED: ${name} (${ticker}) @ MC $${(marketCap / 1000).toFixed(1)}K`);
+    }
 
     if (next <= RUG_THRESHOLD) rugged.push({ coinId, finalPrice: next });
   }

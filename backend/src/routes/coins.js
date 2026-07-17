@@ -24,8 +24,11 @@ router.get('/', async (req, res) => {
         name:          coin.name,
         ticker:        coin.ticker,
         currentPrice,
-        marketCap:     coin.marketCap,
+        marketCap:     currentPrice * 1_000_000_000,
         rugProbability: coin.rugProbability,
+        migrated:      coin.migrated,
+        migratedAt:    coin.migratedAt,
+        createdAt:     coin.createdAt,
         change24h,
       };
     });

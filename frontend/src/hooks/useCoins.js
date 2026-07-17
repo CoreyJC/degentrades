@@ -2,13 +2,16 @@
  * useCoins
  *
  * Loads the initial coin list from REST, then keeps it live via:
- *   price_update  → update currentPrice + change24h on each coin
+ *   price_update  → update currentPrice + marketCap + change24h on each coin
  *   coin_added    → prepend new coin to the list + toast
  *   coin_deleted  → remove coin from list + "RUGGED" toast
+ *   coin_migrated → mark coin as migrated + toast
  */
 
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+
+const TOTAL_SUPPLY = 1_000_000_000;
 
 export function useCoins(socket, pushToast) {
   const [coins,   setCoins]   = useState([]);
@@ -50,7 +53,12 @@ export function useCoins(socket, pushToast) {
             ? parseFloat((((u.price - seed) / seed) * 100).toFixed(2))
             : 0;
 
-          return { ...coin, currentPrice: u.price, change24h };
+          return {
+            ...coin,
+            currentPrice: u.price,
+            marketCap: u.marketCap ?? u.price * TOTAL_SUPPLY,
+            change24h,
+          };
         })
       );
     }
@@ -73,14 +81,31 @@ export function useCoins(socket, pushToast) {
       pushToast?.(`💀 RUGGED: ${name} (${ticker})${priceStr}`, 'rug', 6000);
     }
 
+    // Coin migrated — graduated to next tier
+    function onCoinMigrated({ coinId, name, ticker, marketCap }) {
+      setCoins((prev) =>
+        prev.map((coin) =>
+          coin.id === coinId
+            ? { ...coin, migrated: true, migratedAt: new Date().toISOString() }
+            : coin
+        )
+      );
+      const mcStr = marketCap >= 1000
+        ? `$${(marketCap / 1000).toFixed(1)}K`
+        : `$${marketCap.toFixed(0)}`;
+      pushToast?.(`🚀 $${ticker} just migrated at ${mcStr} MC!`, 'pump', 7000);
+    }
+
     socket.on('price_update',  onPriceUpdate);
     socket.on('coin_added',    onCoinAdded);
     socket.on('coin_deleted',  onCoinDeleted);
+    socket.on('coin_migrated', onCoinMigrated);
 
     return () => {
       socket.off('price_update',  onPriceUpdate);
       socket.off('coin_added',    onCoinAdded);
       socket.off('coin_deleted',  onCoinDeleted);
+      socket.off('coin_migrated', onCoinMigrated);
     };
   }, [socket, pushToast]);
 

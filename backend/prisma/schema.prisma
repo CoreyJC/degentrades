@@ -33,8 +33,11 @@ model Coin {
   ticker         String        @unique
   currentPrice   Float
   marketCap      Float         @default(0)
+  totalSupply    Int           @default(1000000000)
   rugProbability Float         @default(0.005)
   isActive       Boolean       @default(true)
+  migrated       Boolean       @default(false)
+  migratedAt     DateTime?
   createdAt      DateTime      @default(now())
   holdings       Holding[]
   transactions   Transaction[]
