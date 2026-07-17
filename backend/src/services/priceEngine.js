@@ -120,7 +120,13 @@ function _bootstrap(coin) {
 
 async function init() {
   const coins = await prisma.coin.findMany({ where: { isActive: true } });
-  for (const coin of coins) _bootstrap(coin);
+  for (const coin of coins) {
+    _bootstrap(coin);
+    // Override the randomly-walked price back to actual DB price (same as registerCoin does)
+    state[coin.id].price     = coin.currentPrice;
+    state[coin.id].createdAt = coin.createdAt ?? new Date();
+    state[coin.id].migrated  = coin.migrated ?? false;
+  }
   initialized = true;
 }
 
