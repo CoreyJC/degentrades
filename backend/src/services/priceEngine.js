@@ -351,12 +351,12 @@ async function _rugCoin(coinId, finalPrice) {
     if (io) io.emit('coin_deleted', { coinId, name: coin.name, ticker: coin.ticker, finalPrice });
     removeCoin(coinId);
 
-    // Build RUG close transactions for every holder
-    const rugTxns = holdings.map((h) => {
+    // Create RUG close transactions FIRST (coin still exists at this point)
+    for (const h of holdings) {
       const pnlPct = h.avgBuyPrice > 0
         ? ((finalPrice - h.avgBuyPrice) / h.avgBuyPrice) * 100
         : -100;
-      return prisma.transaction.create({
+      await prisma.transaction.create({
         data: {
           userId:      h.userId,
           coinId,
@@ -368,13 +368,12 @@ async function _rugCoin(coinId, finalPrice) {
           pnlPct,
         },
       });
-    });
+    }
 
+    // Now clean up — leave coin record as isActive:false so RUG txn FK stays valid
     await prisma.$transaction([
-      ...rugTxns,
-      prisma.transaction.deleteMany({ where: { coinId, type: { not: 'RUG' } } }),
+      prisma.transaction.deleteMany({ where: { coinId, type: { in: ['BUY', 'SELL'] } } }),
       prisma.holding.deleteMany({ where: { coinId } }),
-      prisma.coin.delete({ where: { id: coinId } }),
     ]);
   } catch (err) {
     console.error(`Error rugging coin ${coinId}:`, err.message);
