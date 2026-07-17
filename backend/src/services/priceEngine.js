@@ -1,11 +1,17 @@
 /**
- * priceEngine.js — Realistic Memecoin Price Engine
+ * priceEngine.js — Realistic Memecoin Price Engine v3
  *
- * Features:
- *  - Momentum system (range -1.0 to +1.0)
- *  - Volatility regime (range 1.0 to 5.0)
- *  - Age-based early accumulation phase (< 2 min protection)
- *  - Revised probability table with mega pumps, big dumps, rugs
+ * Each coin is assigned a FATE at birth and moves through PHASES:
+ *
+ *   early → pump → distribution → bleed → dying
+ *
+ * FATES:
+ *   bleeder (60%) — pumps briefly then slowly dies
+ *   pumper  (30%) — gets one good run then fades
+ *   runner  (10%) — actually makes it, keeps climbing
+ *
+ * PHASES define probability tables — dying phase has NO pumps, only decay.
+ * ATH is tracked so once a coin is 60%+ below its peak, it cannot recover.
  */
 
 const prisma = require('../lib/prisma');
@@ -14,180 +20,254 @@ const MAX_CANDLES         = 500;
 const TICK_MS             = 2000;
 const RUG_THRESHOLD       = 0.0000001;
 const TOTAL_SUPPLY        = 1_000_000_000;
-const MIGRATION_THRESHOLD = 69_000; // $69K market cap — meme number, harder to reach
+const MIGRATION_THRESHOLD = 69_000;
 
 // ── In-memory state ────────────────────────────────────────────────────────────
-// coinId → { price, baseRugProb, createdAt, momentum, volatility, history[], name, ticker, migrated }
 const state = {};
-
 let io          = null;
 let interval    = null;
 let initialized = false;
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+function _rand(min, max) { return min + Math.random() * (max - min); }
 
-function _rand(min, max) {
-  return min + Math.random() * (max - min);
+// ── Fate assignment ────────────────────────────────────────────────────────────
+
+function _assignFate() {
+  const r = Math.random();
+  if (r < 0.60) return 'bleeder';
+  if (r < 0.90) return 'pumper';
+  return 'runner';
 }
 
-/**
- * Age-scaled rug multiplier.
- * < 2 min  → 0 (no rugs in early phase, handled separately)
- * 2-20 min → scales 0.2 → 1.0
- * > 20 min → ticking time bomb
- */
-function _ageRugMultiplier(createdAt) {
-  const ageMs  = Date.now() - new Date(createdAt).getTime();
-  const ageMin = ageMs / 60_000;
+// ── Phase transition ───────────────────────────────────────────────────────────
 
-  if (ageMin < 2)  return 0;                        // protected early phase
-  if (ageMin <= 20) return 0.2 + (ageMin - 2) / 18 * 0.8; // ramp 0.2→1.0
-  const extraMin = ageMin - 20;
-  return 1.0 + 0.1 * extraMin;                      // ticking time bomb
+function _updatePhase(s) {
+  // Track ATH every tick
+  if (s.price > s.ath) s.ath = s.price;
+
+  const phase         = s.phase;
+  const athRatio      = s.ath > 0 ? s.price / s.ath : 1;
+  const gainFromStart = s.startPrice > 0 ? s.price / s.startPrice : 1;
+  const ageMin        = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
+
+  if (phase === 'early') {
+    // Transition to pump if 3x from start
+    if (gainFromStart >= 3) { s.phase = 'pump'; return; }
+    // Bleeders that haven't pumped after 4 min go straight to bleed
+    if (ageMin > 4 && s.fate === 'bleeder' && gainFromStart < 1.5) {
+      s.phase = 'bleed';
+    }
+  }
+
+  if (phase === 'pump') {
+    // Once peaked and falling — distribution
+    if (gainFromStart >= 4 && athRatio < 0.85) { s.phase = 'distribution'; return; }
+    // Runners keep pumping longer; bleeders/pumpers exit pump phase quicker
+    const exitThreshold = s.fate === 'runner' ? 0.78 : 0.88;
+    if (athRatio < exitThreshold) s.phase = 'distribution';
+  }
+
+  if (phase === 'distribution') {
+    if (athRatio < 0.65) s.phase = 'bleed';
+  }
+
+  if (phase === 'bleed') {
+    if (athRatio < 0.30) s.phase = 'dying';
+  }
+  // dying is terminal — no transitions out
 }
+
+// ── Probability tables per phase ───────────────────────────────────────────────
 
 function _nextPrice(coinId, s) {
-  const { price: current, baseRugProb, createdAt, momentum, volatility } = s;
-  const ageMs  = Date.now() - new Date(createdAt).getTime();
-  const ageMin = ageMs / 60_000;
+  const { price: p, phase, fate, momentum } = s;
+  const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
 
-  // ── Early accumulation phase (< 2 min) ──────────────────────────────────────
-  if (ageMin < 2) {
+  // ── EARLY — quiet accumulation, tiny moves, no rugs ──────────────────────
+  if (phase === 'early') {
+    // 5% chance of a surprise early pump to get momentum going
     if (Math.random() < 0.05) {
-      // Surprise early pump
-      const pump = _rand(0.10, 0.40);
-      s.momentum  = Math.min(s.momentum + 0.3, 1.0);
-      _hotVolatility(s, pump);
-      return current * (1 + pump);
+      const pump = _rand(0.08, 0.35);
+      s.momentum = Math.min(s.momentum + 0.4, 1.0);
+      s.volatility = Math.min(s.volatility * 1.5, 5.0);
+      return p * (1 + pump);
     }
-    // Tiny move ±0.5–2%
-    const pct = _rand(0.005, 0.02);
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    return Math.max(current * (1 + dir * pct), 1e-14);
+    // Otherwise tiny sideways movement
+    const pct = _rand(0.002, 0.015);
+    const upChance = 0.5 + momentum * 0.2;
+    const dir = Math.random() < upChance ? 1 : -1;
+    return Math.max(p * (1 + dir * pct), 1e-14);
   }
-
-  // ── Age-scaled rug probability ───────────────────────────────────────────────
-  const rugMultiplier  = _ageRugMultiplier(createdAt);
-  const effectiveRug   = Math.min(baseRugProb * rugMultiplier, 0.50);
 
   const roll = Math.random();
-  let threshold = 0;
+  let t = 0;
 
-  // Rug pull
-  threshold += effectiveRug;
-  if (roll < threshold) {
-    const drop = _rand(0.80, 0.99);
-    s.momentum  = -1.0;
-    return Math.max(current * (1 - drop), 1e-14);
-  }
+  // ── PUMP phase ────────────────────────────────────────────────────────────
+  if (phase === 'pump') {
+    const rugBase = fate === 'runner' ? 0.004 : fate === 'pumper' ? 0.008 : 0.014;
 
-  // Mega pump: 0.5%
-  threshold += 0.005;
-  if (roll < threshold) {
-    const pump = _rand(1.00, 5.00); // +100–500%
-    s.momentum = Math.min(s.momentum + 0.3, 1.0);
-    _hotVolatility(s, pump);
-    return current * (1 + pump);
-  }
+    // Rug
+    t += rugBase;
+    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
 
-  // Pump: 6%
-  threshold += 0.06;
-  if (roll < threshold) {
-    const pump = _rand(0.08, 0.30); // +8–30%
-    s.momentum = Math.min(s.momentum + 0.3, 1.0);
-    _hotVolatility(s, pump);
-    return current * (1 + pump);
-  }
+    // Mega pump (runner only)
+    if (fate === 'runner') {
+      t += 0.008;
+      if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); s.volatility = Math.min(s.volatility * 2, 5.0); return p * (1 + _rand(0.8, 3.0)); }
+    }
 
-  // Minor pump: 12%
-  threshold += 0.12;
-  if (roll < threshold) {
-    const pump = _rand(0.02, 0.08); // +2–8%
-    s.momentum = Math.min(s.momentum + 0.3, 1.0);
-    return current * (1 + pump);
-  }
+    // Regular pump
+    const pumpChance = fate === 'runner' ? 0.18 : fate === 'pumper' ? 0.12 : 0.06;
+    t += pumpChance;
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.3, 1.0); s.volatility = Math.min(s.volatility * 1.3, 5.0); return p * (1 + _rand(0.06, 0.25)); }
 
-  // Normal move: 65% (with momentum bias)
-  threshold += 0.65;
-  if (roll < threshold) {
-    const basePct = _rand(0.005, 0.03) * volatility; // scaled by volatility
-    // Momentum bias: positive momentum → more likely to go up
-    const upChance = 0.5 + momentum * 0.3; // 0.2 to 0.8 range
-    const dir = Math.random() < upChance ? 1 : -1;
-    const pct = Math.min(basePct, 0.15); // cap normal moves at 15%
-    return Math.max(current * (1 + dir * pct), 1e-14);
-  }
+    // Minor pump
+    const minorPumpChance = fate === 'runner' ? 0.20 : fate === 'pumper' ? 0.15 : 0.10;
+    t += minorPumpChance;
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.1, 1.0); return p * (1 + _rand(0.02, 0.07)); }
 
-  // Minor dump: 10%
-  threshold += 0.10;
-  if (roll < threshold) {
-    const dump = _rand(0.02, 0.08); // -2–8%
+    // Normal (momentum-biased)
+    t += 0.45;
+    if (roll < t) {
+      const upBias = fate === 'runner' ? 0.65 : fate === 'pumper' ? 0.55 : 0.45;
+      const dir = Math.random() < upBias + momentum * 0.15 ? 1 : -1;
+      return Math.max(p * (1 + dir * _rand(0.003, 0.025) * s.volatility), 1e-14);
+    }
+
+    // Dump / big dump (remainder)
+    const dump = roll < t + 0.08 ? _rand(0.02, 0.08) : _rand(0.08, 0.30);
     s.momentum = Math.max(s.momentum - 0.2, -1.0);
-    _hotVolatility(s, dump);
-    return Math.max(current * (1 - dump), 1e-14);
+    return Math.max(p * (1 - dump), 1e-14);
   }
 
-  // Dump: 5%
-  threshold += 0.05;
-  if (roll < threshold) {
-    const dump = _rand(0.10, 0.25); // -10–25%
-    s.momentum = Math.max(s.momentum - 0.2, -1.0);
-    _hotVolatility(s, dump);
-    return Math.max(current * (1 - dump), 1e-14);
+  // ── DISTRIBUTION — topping out, selling pressure ──────────────────────────
+  if (phase === 'distribution') {
+    const rugBase = fate === 'runner' ? 0.008 : fate === 'pumper' ? 0.015 : 0.025;
+
+    t += rugBase;
+    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
+
+    // Runners can still mini-pump
+    if (fate === 'runner') {
+      t += 0.08;
+      if (roll < t) { s.momentum = Math.min(s.momentum + 0.2, 1.0); return p * (1 + _rand(0.03, 0.12)); }
+    }
+
+    // Dead cat bounce (small, all fates)
+    t += 0.05;
+    if (roll < t) { return p * (1 + _rand(0.01, 0.04)); }
+
+    // Normal (downward-biased)
+    t += 0.35;
+    if (roll < t) {
+      const downBias = fate === 'runner' ? 0.45 : 0.60;
+      const dir = Math.random() < downBias ? -1 : 1;
+      return Math.max(p * (1 + dir * _rand(0.003, 0.018)), 1e-14);
+    }
+
+    // Minor dump
+    t += 0.28;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.15, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
+
+    // Dump / big dump
+    const dump = roll < t + 0.15 ? _rand(0.08, 0.20) : _rand(0.20, 0.45);
+    s.momentum = Math.max(s.momentum - 0.25, -1.0);
+    return Math.max(p * (1 - dump), 1e-14);
   }
 
-  // Big dump: 1.5%
-  {
-    const dump = _rand(0.30, 0.60); // -30–60%
-    s.momentum = Math.max(s.momentum - 0.2, -1.0);
-    _hotVolatility(s, dump);
-    return Math.max(current * (1 - dump), 1e-14);
-  }
-}
+  // ── BLEED — slow grind down, occasional dead cat bounce ──────────────────
+  if (phase === 'bleed') {
+    const rugBase = 0.025 + (ageMin > 15 ? 0.015 : 0);
 
-/** Trigger hot volatility phase if move was large enough */
-function _hotVolatility(s, moveFraction) {
-  if (moveFraction > 0.15) {
-    s.volatility = Math.min(s.volatility * 1.5, 5.0);
+    t += rugBase;
+    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
+
+    // Tiny dead cat bounce (rare)
+    t += 0.04;
+    if (roll < t) { return p * (1 + _rand(0.01, 0.03)); }
+
+    // Sideways grind (slight down bias)
+    t += 0.30;
+    if (roll < t) {
+      const dir = Math.random() < 0.65 ? -1 : 1;
+      return Math.max(p * (1 + dir * _rand(0.002, 0.012)), 1e-14);
+    }
+
+    // Minor dump
+    t += 0.35;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.2, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
+
+    // Dump
+    t += 0.20;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.3, -1.0); return Math.max(p * (1 - _rand(0.08, 0.22)), 1e-14); }
+
+    // Big dump
+    s.momentum = -1.0;
+    return Math.max(p * (1 - _rand(0.22, 0.50)), 1e-14);
   }
+
+  // ── DYING — death spiral, NO pumps, only down ─────────────────────────────
+  if (phase === 'dying') {
+    const rugChance = Math.min(0.06 + ageMin * 0.004, 0.30); // accelerates with age
+
+    t += rugChance;
+    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.85, 0.99)), 1e-14); }
+
+    // Small bounce (looks like hope, isn't)
+    t += 0.03;
+    if (roll < t) { return p * (1 + _rand(0.005, 0.015)); }
+
+    // Slow bleed
+    t += 0.35;
+    if (roll < t) { return Math.max(p * (1 - _rand(0.005, 0.025)), 1e-14); }
+
+    // Moderate dump
+    t += 0.35;
+    if (roll < t) { return Math.max(p * (1 - _rand(0.025, 0.10)), 1e-14); }
+
+    // Heavy dump
+    return Math.max(p * (1 - _rand(0.10, 0.40)), 1e-14);
+  }
+
+  return p;
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 
 function _bootstrap(coin) {
-  let p         = coin.currentPrice;
-  const history = [];
-  const now     = Date.now();
+  const startPrice = coin.currentPrice || 1e-7;
+  const fate       = _assignFate();
+  const history    = [];
+  const now        = Date.now();
+  let p            = startPrice;
 
   for (let i = 100; i >= 1; i--) {
     const open   = p;
-    const change = (Math.random() - 0.48) * 0.04;
+    const change = (Math.random() - 0.48) * 0.03;
     p            = Math.max(p * (1 + change), 1e-14);
     history.push({
       time:   Math.floor((now - i * TICK_MS) / 1000),
-      open,
-      high:   Math.max(open, p) * (1 + Math.random() * 0.01),
-      low:    Math.min(open, p) * (1 - Math.random() * 0.01),
-      close:  p,
-      volume: Math.random() * 1000,
+      open, close: p,
+      high: Math.max(open, p) * (1 + Math.random() * 0.005),
+      low:  Math.min(open, p) * (1 - Math.random() * 0.005),
+      volume: Math.random() * 500,
     });
   }
 
-  const RUG_PROB_MIN = 0.005;
-  const RUG_PROB_MAX = 0.010;
-  const baseRugProb  = coin.rugProbability ??
-    (RUG_PROB_MIN + Math.random() * (RUG_PROB_MAX - RUG_PROB_MIN));
-
   state[coin.id] = {
-    price:      p,
-    baseRugProb,
-    createdAt:  coin.createdAt ?? new Date(),
+    price:      startPrice,
+    startPrice,
+    ath:        startPrice,
+    fate,
+    phase:      'early',
     momentum:   0,
     volatility: 1.0,
+    createdAt:  coin.createdAt ?? new Date(),
     migrated:   coin.migrated ?? false,
     history,
     name:       coin.name,
     ticker:     coin.ticker,
+    baseRugProb: coin.rugProbability ?? 0.007,
   };
 }
 
@@ -196,9 +276,12 @@ async function init() {
   for (const coin of coins) {
     _bootstrap(coin);
     state[coin.id].price     = coin.currentPrice;
+    state[coin.id].startPrice = coin.currentPrice;
+    state[coin.id].ath       = coin.currentPrice;
     state[coin.id].createdAt = coin.createdAt ?? new Date();
   }
   initialized = true;
+  console.log(`💹 Price engine initialized — ${coins.length} coins loaded`);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -206,32 +289,18 @@ async function init() {
 function registerCoin(coin) {
   if (state[coin.id]) return;
   _bootstrap(coin);
-  state[coin.id].price     = coin.currentPrice;
-  state[coin.id].createdAt = coin.createdAt ?? new Date();
-  state[coin.id].name      = coin.name;
-  state[coin.id].ticker    = coin.ticker;
+  state[coin.id].price      = coin.currentPrice;
+  state[coin.id].startPrice = coin.currentPrice;
+  state[coin.id].ath        = coin.currentPrice;
+  state[coin.id].createdAt  = coin.createdAt ?? new Date();
+  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) — fate: ${state[coin.id].fate}`);
 }
 
-function removeCoin(coinId) {
-  delete state[coinId];
-}
-
-function getCurrentPrice(coinId) {
-  return state[coinId]?.price ?? null;
-}
-
-function getHistory(coinId) {
-  return state[coinId]?.history ?? [];
-}
-
-function getAllPrices() {
-  return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price]));
-}
-
-function getCreatedAt(coinId) {
-  return state[coinId]?.createdAt ?? null;
-}
-
+function removeCoin(coinId) { delete state[coinId]; }
+function getCurrentPrice(coinId) { return state[coinId]?.price ?? null; }
+function getHistory(coinId) { return state[coinId]?.history ?? []; }
+function getAllPrices() { return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price])); }
+function getCreatedAt(coinId) { return state[coinId]?.createdAt ?? null; }
 function getIo() { return io; }
 
 // ── Rug execution ──────────────────────────────────────────────────────────────
@@ -240,15 +309,11 @@ async function _rugCoin(coinId, finalPrice) {
   try {
     const coin = await prisma.coin.findUnique({ where: { id: coinId } });
     if (!coin) { removeCoin(coinId); return; }
-
-    console.log(`💀 RUG PULL: ${coin.name} (${coin.ticker}) — final price $${finalPrice.toExponential(3)}`);
+    const s = state[coinId];
+    console.log(`💀 RUG: ${coin.name} (${coin.ticker}) [${s?.fate ?? '?'}/${s?.phase ?? '?'}] $${finalPrice.toExponential(2)}`);
 
     await prisma.coin.update({ where: { id: coinId }, data: { isActive: false } });
-
-    if (io) {
-      io.emit('coin_deleted', { coinId, name: coin.name, ticker: coin.ticker, finalPrice });
-    }
-
+    if (io) io.emit('coin_deleted', { coinId, name: coin.name, ticker: coin.ticker, finalPrice });
     removeCoin(coinId);
 
     await prisma.$transaction([
@@ -256,7 +321,6 @@ async function _rugCoin(coinId, finalPrice) {
       prisma.holding.deleteMany({ where: { coinId } }),
       prisma.coin.delete({ where: { id: coinId } }),
     ]);
-
   } catch (err) {
     console.error(`Error rugging coin ${coinId}:`, err.message);
     removeCoin(coinId);
@@ -273,10 +337,12 @@ async function tick() {
   const nowSec  = Math.floor(Date.now() / 1000);
 
   for (const [coinId, s] of Object.entries(state)) {
-    // Decay momentum and volatility each tick
-    s.momentum   *= 0.9;
-    s.volatility *= 0.98;
-    if (s.volatility < 1.0) s.volatility = 1.0;
+    // Decay momentum each tick
+    s.momentum   *= 0.92;
+    s.volatility  = Math.max(s.volatility * 0.985, 1.0);
+
+    // Update phase before computing next price
+    _updatePhase(s);
 
     const prev = s.price;
     const next = _nextPrice(coinId, s);
@@ -290,7 +356,7 @@ async function tick() {
       lastCandle.high   = Math.max(lastCandle.high, next);
       lastCandle.low    = Math.min(lastCandle.low, next);
       lastCandle.close  = next;
-      lastCandle.volume += Math.abs((next - prev) / prev) * 5000 + Math.random() * 100;
+      lastCandle.volume += Math.abs((next - prev) / prev) * 4000 + Math.random() * 80;
     } else {
       candles.push({
         time:   nowSec,
@@ -298,7 +364,7 @@ async function tick() {
         high:   Math.max(prev, next),
         low:    Math.min(prev, next),
         close:  next,
-        volume: Math.abs((next - prev) / prev) * 5000 + Math.random() * 100,
+        volume: Math.abs((next - prev) / prev) * 4000 + Math.random() * 80,
       });
       if (candles.length > MAX_CANDLES) candles.shift();
     }
@@ -319,9 +385,7 @@ async function tick() {
   if (io && Object.keys(updates).length) io.emit('price_update', updates);
 
   for (const coinId of Object.keys(updates)) {
-    prisma.coin
-      .update({ where: { id: coinId }, data: { currentPrice: updates[coinId].price } })
-      .catch(() => {});
+    prisma.coin.update({ where: { id: coinId }, data: { currentPrice: updates[coinId].price } }).catch(() => {});
   }
 
   for (const { coinId, finalPrice } of rugged) {
@@ -336,13 +400,14 @@ function start(socketIo) {
   init()
     .then(() => {
       interval = setInterval(tick, TICK_MS);
-      console.log('💹 Price engine started (momentum/volatility model)');
+      console.log('💹 Price engine started (fate/phase model v3)');
     })
     .catch((err) => console.error('Price engine init failed:', err));
 }
 
 function stop() {
   if (interval) clearInterval(interval);
+  initialized = false;
 }
 
 module.exports = {
