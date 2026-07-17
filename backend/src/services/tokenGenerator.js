@@ -9,7 +9,7 @@
 const prisma      = require('../lib/prisma');
 const priceEngine = require('./priceEngine');
 
-const SPAWN_INTERVAL_MS = 30_000; // exactly 30 seconds
+const SPAWN_INTERVAL_MS = 10_000; // every 10 seconds
 
 // ── Word banks ─────────────────────────────────────────────────────────────────
 const ADJECTIVES = [
