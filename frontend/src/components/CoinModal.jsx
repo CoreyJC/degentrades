@@ -119,6 +119,7 @@ export default function CoinModal({ coinId, onClose }) {
   const [holding,   setHolding]   = useState(null);
   const [busy,      setBusy]      = useState(false);
   const [showGate,  setShowGate]  = useState(false);
+  const [tradeResult, setTradeResult] = useState(null); // P&L summary after close
 
   // Close on Escape
   useEffect(() => {
@@ -339,6 +340,11 @@ export default function CoinModal({ coinId, onClose }) {
     if (!requireAuth()) return;
     const amt = overrideAmount ?? parseFloat(coinAmt);
     if (!sellAll && (!amt || amt <= 0)) return push('Enter a valid amount', 'error');
+
+    // Capture cost basis before the sell clears the holding
+    const costBasis = holding ? holding.avgBuyPrice * holding.amount : 0;
+    const isFullExit = sellAll || (holding && Math.abs(amt - holding.amount) < 0.000001);
+
     setBusy(true);
     try {
       const payload = sellAll
@@ -350,7 +356,22 @@ export default function CoinModal({ coinId, onClose }) {
       setCoinAmt('');
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);
-      setHolding(portRes.data.holdings.find((h) => h.coinId === coinId) ?? null);
+      const newHolding = portRes.data.holdings.find((h) => h.coinId === coinId) ?? null;
+      setHolding(newHolding);
+
+      // Show P&L summary when fully exiting a position
+      if (isFullExit && !newHolding) {
+        const pnlSol = data.solReceived - costBasis;
+        const pnlPct = costBasis > 0 ? (pnlSol / costBasis) * 100 : 0;
+        setTradeResult({
+          ticker:      coin.ticker,
+          costBasis,
+          solReceived: data.solReceived,
+          pnlSol,
+          pnlPct,
+          isWin:       pnlSol >= 0,
+        });
+      }
     } catch (e) {
       push(e.response?.data?.error ?? 'Sell failed', 'error');
     } finally { setBusy(false); }
@@ -667,6 +688,47 @@ export default function CoinModal({ coinId, onClose }) {
       </div>
 
       {showGate && <LoginGateModal onClose={() => setShowGate(false)} />}
+
+      {/* P&L result overlay after closing a position */}
+      {tradeResult && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className={`bg-gray-950 border-2 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl
+            ${tradeResult.isWin ? 'border-green-500/60' : 'border-red-500/60'}`}>
+
+            <div className="text-5xl mb-3">{tradeResult.isWin ? '💰' : '💥'}</div>
+            <div className="text-xl font-bold text-white mb-1">
+              {tradeResult.isWin ? 'Position Closed — Profit!' : 'Position Closed — Loss'}
+            </div>
+            <div className="text-gray-500 text-sm mb-6">${tradeResult.ticker}</div>
+
+            <div className="bg-gray-900 rounded-xl p-4 space-y-2 mb-6 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Cost basis</span>
+                <span className="text-gray-300 font-mono">{tradeResult.costBasis.toFixed(4)} SOL</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Received</span>
+                <span className="text-gray-300 font-mono">{tradeResult.solReceived.toFixed(4)} SOL</span>
+              </div>
+              <div className={`flex justify-between border-t border-gray-800 pt-2 mt-2 font-bold text-base
+                ${tradeResult.isWin ? 'text-green-400' : 'text-red-400'}`}>
+                <span>P&amp;L</span>
+                <span className="font-mono">
+                  {tradeResult.isWin ? '+' : ''}{tradeResult.pnlSol.toFixed(4)} SOL
+                  &nbsp;({tradeResult.isWin ? '+' : ''}{tradeResult.pnlPct.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setTradeResult(null)}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
