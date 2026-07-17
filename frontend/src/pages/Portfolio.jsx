@@ -3,12 +3,21 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 
-const SOL_USD = 150; // fixed rate for simulator display
+const SOL_USD      = 150;
+const TOTAL_SUPPLY = 1_000_000_000;
+
 function fmtUSD(sol) {
   const usd = sol * SOL_USD;
   if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
   if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(2)}K`;
   return `$${usd.toFixed(2)}`;
+}
+
+function fmtMC(price) {
+  const mc = price * TOTAL_SUPPLY;
+  if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(2)}M`;
+  if (mc >= 1_000)     return `$${(mc / 1_000).toFixed(1)}K`;
+  return `$${mc.toFixed(0)}`;
 }
 
 function fmt(p) {
@@ -112,9 +121,9 @@ export default function Portfolio() {
             <thead>
               <tr className="text-gray-500 border-b border-gray-800">
                 <th className="text-left pb-2 pl-2">Token</th>
-                <th className="text-right pb-2">Amount</th>
-                <th className="text-right pb-2">Avg Buy</th>
-                <th className="text-right pb-2">Current</th>
+                <th className="text-right pb-2">Value (SOL)</th>
+                <th className="text-right pb-2">Avg Buy MC</th>
+                <th className="text-right pb-2">Current MC</th>
                 <th className="text-right pb-2">Value</th>
                 <th className="text-right pb-2 pr-2">P&L</th>
               </tr>
@@ -131,13 +140,14 @@ export default function Portfolio() {
                       </Link>
                     </td>
                     <td className="py-3 text-right font-mono text-gray-300">
-                      {h.amount.toExponential(3)}
+                      {(h.currentValue ?? 0).toFixed(3)}
+                      <div className="text-xs text-gray-600">{h.amount.toExponential(2)} coins</div>
                     </td>
                     <td className="py-3 text-right font-mono text-gray-400">
-                      {fmt(h.avgBuyPrice)}
+                      {fmtMC(h.avgBuyPrice)}
                     </td>
                     <td className="py-3 text-right font-mono text-white">
-                      {fmt(h.coin.currentPrice)}
+                      {fmtMC(h.coin.currentPrice)}
                     </td>
                     <td className="py-3 text-right font-mono text-gray-300">
                       {fmtUSD(h.currentValue ?? 0)}
