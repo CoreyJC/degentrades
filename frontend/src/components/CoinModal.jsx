@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createChart, CandlestickSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts';
 import axios from 'axios';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -21,6 +21,14 @@ function fmtMC(mc) {
   if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(1)}M`;
   if (mc >= 1_000)     return `$${(mc / 1_000).toFixed(1)}K`;
   return `$${mc.toFixed(0)}`;
+}
+
+function calcSMA(candles, period = 20) {
+  return candles.map((c, i) => {
+    if (i < period - 1) return null;
+    const avg = candles.slice(i - period + 1, i + 1).reduce((s, x) => s + x.close, 0) / period;
+    return { time: c.time, value: avg };
+  }).filter(Boolean);
 }
 
 function LoginGateModal({ onClose }) {
@@ -67,6 +75,9 @@ export default function CoinModal({ coinId, onClose }) {
   const chartElRef  = useRef(null);
   const chartRef    = useRef(null);
   const seriesRef   = useRef(null);
+  const volumeRef   = useRef(null);
+  const smaRef      = useRef(null);
+  const candleCache = useRef([]);
 
   const [coin,      setCoin]      = useState(null);
   const [price,     setPrice]     = useState(null);
@@ -128,24 +139,53 @@ export default function CoinModal({ coinId, onClose }) {
           rightPriceScale: { borderColor: '#1f2937' },
           timeScale:       { borderColor: '#1f2937', timeVisible: true },
           autoSize:        true,
-          height:          280,
+          height:          340,
         });
         chartRef.current = chart;
 
         const series = chart.addSeries(CandlestickSeries, {
-          upColor:         '#22c55e',
-          downColor:       '#ef4444',
-          borderUpColor:   '#22c55e',
-          borderDownColor: '#ef4444',
-          wickUpColor:     '#22c55e',
-          wickDownColor:   '#ef4444',
+          upColor:         '#00ff88',
+          downColor:       '#ff3b3b',
+          borderUpColor:   '#00ff88',
+          borderDownColor: '#ff3b3b',
+          wickUpColor:     '#00ff88',
+          wickDownColor:   '#ff3b3b',
         });
         seriesRef.current = series;
+
+        // Volume histogram
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+          priceFormat:  { type: 'volume' },
+          priceScaleId: 'volume',
+        });
+        chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        volumeRef.current = volumeSeries;
+
+        // 20-period SMA line
+        const smaSeries = chart.addSeries(LineSeries, {
+          color:             '#f59e0b',
+          lineWidth:         1,
+          priceScaleId:      'right',
+          lastValueVisible:  false,
+          priceLineVisible:  false,
+        });
+        smaRef.current = smaSeries;
 
         axios.get(`/api/coins/${coinId}/history`)
           .then(({ data }) => {
             if (seriesRef.current) {
               series.setData(data);
+              // Volume bars (green/red matching candle direction)
+              const volData = data.map((c) => ({
+                time:  c.time,
+                value: c.volume,
+                color: c.close >= c.open ? '#00ff8855' : '#ff3b3b55',
+              }));
+              volumeRef.current?.setData(volData);
+              // SMA
+              const smaData = calcSMA(data);
+              smaRef.current?.setData(smaData);
+              candleCache.current = data;
               chart.timeScale().fitContent();
             }
           })
@@ -161,8 +201,11 @@ export default function CoinModal({ coinId, onClose }) {
       if (raf)   cancelAnimationFrame(raf);
       if (ro)    ro.disconnect();
       if (chart) { try { chart.remove(); } catch (_) {} }
-      chartRef.current  = null;
-      seriesRef.current = null;
+      chartRef.current   = null;
+      seriesRef.current  = null;
+      volumeRef.current  = null;
+      smaRef.current     = null;
+      candleCache.current = [];
     };
   }, [loading, rugged, coinId]);
 
@@ -175,7 +218,31 @@ export default function CoinModal({ coinId, onClose }) {
       if (!u) return;
       setPrice(u.price);
       setCoin((prev) => prev ? { ...prev, currentPrice: u.price } : prev);
-      if (seriesRef.current && u.candle) seriesRef.current.update(u.candle);
+      if (seriesRef.current && u.candle) {
+        seriesRef.current.update(u.candle);
+        // Update volume bar
+        if (volumeRef.current) {
+          volumeRef.current.update({
+            time:  u.candle.time,
+            value: u.candle.volume,
+            color: u.candle.close >= u.candle.open ? '#00ff8855' : '#ff3b3b55',
+          });
+        }
+        // Update SMA: patch last candle in cache then recalc tail
+        const cache = candleCache.current;
+        const last  = cache[cache.length - 1];
+        if (last && last.time === u.candle.time) {
+          cache[cache.length - 1] = u.candle;
+        } else {
+          cache.push(u.candle);
+          if (cache.length > 500) cache.shift();
+        }
+        if (smaRef.current && cache.length >= 20) {
+          const slice  = cache.slice(-20);
+          const avg    = slice.reduce((s, x) => s + x.close, 0) / 20;
+          smaRef.current.update({ time: u.candle.time, value: avg });
+        }
+      }
     }
 
     function onCoinDeleted({ coinId: deletedId, name, ticker }) {
@@ -290,7 +357,7 @@ export default function CoinModal({ coinId, onClose }) {
                 <div
                   ref={chartElRef}
                   className="rounded-xl overflow-hidden border border-gray-800 mb-6"
-                  style={{ height: '280px' }}
+                  style={{ height: '340px' }}
                 />
 
                 {/* Buy / Sell */}
