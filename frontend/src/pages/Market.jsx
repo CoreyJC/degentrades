@@ -95,19 +95,15 @@ export default function Market() {
 
   const newIds = new Set(newCoins.map((c) => c.id));
 
-  // ── 🔥 Pumping — top 20 by 24h gain, excludes New ────────────────────────
+  // ── 🔥 Pumping — non-new coins with positive or flat change, sorted best first
   const pumping = filtered
-    .filter((c) => !newIds.has(c.id))
-    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
-    .slice(0, 20);
+    .filter((c) => !newIds.has(c.id) && (c.change24h ?? 0) >= 0)
+    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0));
 
-  const pumpingIds = new Set(pumping.map((c) => c.id));
-
-  // ── 💀 Bleeding — top 20 by 24h loss, excludes New and Pumping ───────────
+  // ── 💀 Bleeding — non-new coins with negative change, sorted worst first
   const bleeding = filtered
-    .filter((c) => !newIds.has(c.id) && !pumpingIds.has(c.id))
-    .sort((a, b) => (a.change24h ?? 0) - (b.change24h ?? 0))
-    .slice(0, 20);
+    .filter((c) => !newIds.has(c.id) && (c.change24h ?? 0) < 0)
+    .sort((a, b) => (a.change24h ?? 0) - (b.change24h ?? 0));
 
   if (error) return (
     <div className="max-w-4xl mx-auto p-8 text-red-400">Error: {error}</div>
