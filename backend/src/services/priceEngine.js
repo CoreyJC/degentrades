@@ -617,6 +617,7 @@ async function tick() {
     const marketCap = next * TOTAL_SUPPLY;
 
     // ── Top holder % — dilutes slowly as coin pumps organically; bundled barely moves
+    if (s.topHolderPct == null) s.topHolderPct = 50; // guard for coins loaded before this feature
     if (pctChange > 0.03 && s.topHolderPct > 1) {
       const dilution = s.isBundled ? 0.05 : 0.30; // bundled: dev holds, organic: spreads out
       s.topHolderPct = Math.max(1, s.topHolderPct - pctChange * dilution * 100);
@@ -636,7 +637,7 @@ async function tick() {
       s.holderCount + (targetHolders - s.holderCount) * convergenceRate
     ));
 
-    updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, topHolderPct: parseFloat(s.topHolderPct.toFixed(1)), isBundled: s.isBundled, candle: candles[candles.length - 1] };
+    updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, topHolderPct: parseFloat((s.topHolderPct ?? 50).toFixed(1)), isBundled: s.isBundled ?? false, candle: candles[candles.length - 1] };
 
     // Migration check
     if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
