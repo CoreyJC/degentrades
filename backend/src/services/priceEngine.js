@@ -87,8 +87,13 @@ function _updatePhase(s) {
 
   if (phase === 'pump') {
     const isLegend = s.ceiling >= 10_000_000;
+    // High-MC runners enter consolidation periods - back-and-forth fighting
+    if (s.fate === 'runner' && marketCap > 500_000 && Math.random() < 0.0012) {
+      s.phase = 'consolidation';
+      s.consolidationStart = Date.now();
+      return;
+    }
     if (s.fate === 'runner') {
-      // Legends need much bigger gain + deeper dip before distribution
       const gainNeeded = isLegend ? (s.ceiling / (s.startPrice * TOTAL_SUPPLY)) * 0.8 : 10;
       const dipNeeded  = isLegend ? 0.55 : 0.70;
       if (gainFromStart >= gainNeeded && athRatio < dipNeeded) s.phase = 'distribution';
@@ -98,6 +103,21 @@ function _updatePhase(s) {
     } else {
       if (gainFromStart >= 3 && athRatio < 0.82) s.phase = 'distribution';
     }
+  }
+
+  // Consolidation: violent sideways chop - either resumes pump or rolls over
+  if (phase === 'consolidation') {
+    const elapsed = s.consolidationStart ? (Date.now() - s.consolidationStart) / 1000 : 999;
+    const duration = 45 + Math.random() * 90; // 45-135 seconds of fighting
+    if (elapsed > duration) {
+      if (s.fate === 'runner' && Math.random() < 0.55) {
+        s.phase = 'pump'; // continuation - bulls win
+      } else {
+        s.phase = 'distribution'; // bears win, time to roll over
+      }
+      s.consolidationStart = null;
+    }
+    return; // skip other transitions while consolidating
   }
 
   if (phase === 'distribution') {
@@ -157,6 +177,37 @@ function _nextPrice(coinId, s) {
       s.momentum = Math.max(s.momentum - 0.15, -1.0);
       return Math.max(p * (1 - dump), 1e-14);
     }
+  }
+
+  // ── CONSOLIDATION - high-MC fighter, big candles both ways ───────────────
+  if (phase === 'consolidation') {
+    const roll = Math.random();
+    let t = 0;
+
+    // Very rare rug (coin is established, whales protecting)
+    t += 0.002;
+    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.60, 0.90)), 1e-14); }
+
+    // Big bull candle - attempt to break out
+    t += 0.11;
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); return p * (1 + _rand(0.12, 0.45)); }
+
+    // Big bear candle - rejection / shakeout
+    t += 0.11;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.4, -1.0); return Math.max(p * (1 - _rand(0.12, 0.38)), 1e-14); }
+
+    // Medium up
+    t += 0.18;
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.2, 1.0); return p * (1 + _rand(0.04, 0.12)); }
+
+    // Medium down
+    t += 0.18;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.2, -1.0); return Math.max(p * (1 - _rand(0.04, 0.12)), 1e-14); }
+
+    // Small choppy noise - slightly momentum-biased
+    const bias = s.momentum * 0.08;
+    const dir  = Math.random() < 0.5 + bias ? 1 : -1;
+    return Math.max(p * (1 + dir * _rand(0.008, 0.035)), 1e-14);
   }
 
   // ── STALLED - coin is flat and looks dead; rare chance to wake up ─────────
@@ -359,7 +410,8 @@ function _bootstrap(coin) {
     // Stall: coin goes sideways and looks dead until it wakes up or dies
     stalled:     Math.random() < stallProb,
     // Simulated holder count
-    holderCount: Math.floor(1 + Math.random() * 2), // 1-3 at birth
+    holderCount:        Math.floor(1 + Math.random() * 2), // 1–3 at birth
+    consolidationStart: null,
   };
 }
 
@@ -404,7 +456,7 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
   if (!s) return;
 
   const marketCap = s.price * TOTAL_SUPPLY;
-  // Impact scales with trade size vs market cap — thin liquidity = big moves
+  // Impact scales with trade size vs market cap - thin liquidity = big moves
   // 1 SOL into $1K MC = 15% bump | 5 SOL = 75% | 10 SOL = 150% (capped at 5x)
   const rawImpact = Math.abs(impactSol) / marketCap * 150;
   const impactPct = Math.min(rawImpact, 5.0); // max 5x price move per single trade
