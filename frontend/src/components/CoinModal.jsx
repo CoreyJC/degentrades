@@ -90,6 +90,8 @@ export default function CoinModal({ coinId, onClose }) {
   const volumeRef   = useRef(null);
   const smaRef      = useRef(null);
   const candleCache = useRef([]);
+  const markersRef  = useRef([]);   // B/S trade markers
+  const avgLineRef  = useRef(null); // avg entry price line
 
   const [coin,      setCoin]      = useState(null);
   const [price,     setPrice]     = useState(null);
@@ -121,7 +123,49 @@ export default function CoinModal({ coinId, onClose }) {
   const [showGate,  setShowGate]  = useState(false);
   const [tradeResult, setTradeResult] = useState(null); // P&L summary after close
 
-  // Close on Escape
+  // ── Chart helpers ─────────────────────────────────────────────────────────────────────────
+
+  function setMarkers(markers) {
+    if (!seriesRef.current) return;
+    // lightweight-charts requires markers sorted by time
+    const sorted = [...markers].sort((a, b) => a.time - b.time);
+    seriesRef.current.setMarkers(sorted);
+  }
+
+  function addMarker(type, price, time) {
+    const isBuy = type === 'BUY';
+    const marker = {
+      time,
+      position:  isBuy ? 'belowBar' : 'aboveBar',
+      color:     isBuy ? '#00ff88'  : '#ff3b3b',
+      shape:     isBuy ? 'arrowUp'  : 'arrowDown',
+      text:      isBuy ? 'B'        : 'S',
+    };
+    markersRef.current = [...markersRef.current, marker];
+    setMarkers(markersRef.current);
+  }
+
+  function updateAvgLine(h) {
+    if (!seriesRef.current) return;
+    // Remove old line
+    if (avgLineRef.current) {
+      try { seriesRef.current.removePriceLine(avgLineRef.current); } catch (_) {}
+      avgLineRef.current = null;
+    }
+    // Draw new line if we have a holding
+    if (h && h.avgBuyPrice > 0) {
+      avgLineRef.current = seriesRef.current.createPriceLine({
+        price:            h.avgBuyPrice * TOTAL_SUPPLY,
+        color:            '#f59e0b',
+        lineWidth:        1,
+        lineStyle:        2, // dashed
+        axisLabelVisible: true,
+        title:            'Avg Entry',
+      });
+    }
+  }
+
+  // ── Close on Escape
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -210,12 +254,13 @@ export default function CoinModal({ coinId, onClose }) {
         });
         smaRef.current = smaSeries;
 
-        axios.get(`/api/coins/${coinId}/history`)
-          .then(({ data }) => {
-            if (!data || data.length === 0) return; // will build up shortly
-            if (seriesRef.current) {
-              // Convert price → market cap for chart display
-              const mcData = data.map((c) => ({
+        // Load candle history + user's trade markers in parallel
+        Promise.all([
+          axios.get(`/api/coins/${coinId}/history`),
+          user ? axios.get(`/api/portfolio/transactions/${coinId}`) : Promise.resolve({ data: [] }),
+        ]).then(([{ data: candleData }, { data: txns }]) => {
+            if (candleData && candleData.length > 0 && seriesRef.current) {
+              const mcData = candleData.map((c) => ({
                 ...c,
                 open:  c.open  * TOTAL_SUPPLY,
                 high:  c.high  * TOTAL_SUPPLY,
@@ -223,21 +268,29 @@ export default function CoinModal({ coinId, onClose }) {
                 close: c.close * TOTAL_SUPPLY,
               }));
               series.setData(mcData);
-              // Volume bars
-              const volData = data.map((c) => ({
+              const volData = candleData.map((c) => ({
                 time:  c.time,
                 value: c.volume,
                 color: c.close >= c.open ? '#00ff8855' : '#ff3b3b55',
               }));
               volumeRef.current?.setData(volData);
-              // SMA on MC values
               const smaData = calcSMA(mcData);
               smaRef.current?.setData(smaData);
               candleCache.current = mcData;
               chart.timeScale().fitContent();
             }
-          })
-          .catch(() => {});
+            // Plot historical B/S markers
+            if (txns.length > 0) {
+              markersRef.current = txns.map((t) => ({
+                time:     Math.floor(new Date(t.createdAt).getTime() / 1000),
+                position: t.type === 'BUY' ? 'belowBar' : 'aboveBar',
+                color:    t.type === 'BUY' ? '#00ff88'  : '#ff3b3b',
+                shape:    t.type === 'BUY' ? 'arrowUp'  : 'arrowDown',
+                text:     t.type === 'BUY' ? 'B'        : 'S',
+              }));
+              setMarkers(markersRef.current);
+            }
+          }).catch(() => {});
 
         // autoSize handles resize — no manual ResizeObserver needed
       } catch (err) {
@@ -256,6 +309,15 @@ export default function CoinModal({ coinId, onClose }) {
       candleCache.current = [];
     };
   }, [loading, rugged, coinId]);
+
+  // Keep avg entry line in sync with holding changes
+  useEffect(() => {
+    if (loading || rugged) return;
+    // Small delay to ensure chart series is initialized
+    const t = setTimeout(() => updateAvgLine(holding), 200);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holding, loading, rugged]);
 
   // Socket events
   useEffect(() => {
@@ -328,6 +390,7 @@ export default function CoinModal({ coinId, onClose }) {
       const mcAfterBuy = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
       push(`✅ Bought ${coin.ticker} · MC ${fmtMC(mcAfterBuy)}`, 'success');
       setSolAmt('');
+      addMarker('BUY', data.price, Math.floor(Date.now() / 1000));
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);
       setHolding(portRes.data.holdings.find((h) => h.coinId === coinId) ?? null);
@@ -354,6 +417,7 @@ export default function CoinModal({ coinId, onClose }) {
       const mcAfterSell = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
       push(`💰 Sold ${coin.ticker} · MC ${fmtMC(mcAfterSell)} · +${data.solReceived.toFixed(4)} SOL`, 'success');
       setCoinAmt('');
+      addMarker('SELL', data.price, Math.floor(Date.now() / 1000));
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);
       const newHolding = portRes.data.holdings.find((h) => h.coinId === coinId) ?? null;

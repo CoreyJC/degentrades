@@ -94,4 +94,19 @@ router.get('/trades', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/portfolio/transactions/:coinId — trade history for a specific coin
+router.get('/transactions/:coinId', authenticate, async (req, res) => {
+  try {
+    const txns = await prisma.transaction.findMany({
+      where:   { userId: req.userId, coinId: req.params.coinId, type: { in: ['BUY', 'SELL'] } },
+      orderBy: { createdAt: 'asc' },
+      select:  { id: true, type: true, price: true, amount: true, solSpent: true, createdAt: true },
+    });
+    res.json(txns);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
