@@ -172,66 +172,52 @@ export default function Portfolio() {
         </div>
       )}
 
-      {/* Win/Loss Stats */}
       {tradeData && (
         <>
-          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3 mt-8">Trading Stats</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3 mt-8">Lifetime Trading Stats</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-white">{tradeData.stats.total}</div>
-              <div className="text-xs text-gray-500 mt-1">Total Sells</div>
+              <div className="text-xs text-gray-500 mt-1">Total Trades</div>
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-green-400">{tradeData.stats.wins}</div>
-              <div className="text-xs text-gray-500 mt-1">Wins</div>
+              <div className="text-xs text-gray-500 mt-1">Winning</div>
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-red-400">{tradeData.stats.losses}</div>
-              <div className="text-xs text-gray-500 mt-1">Losses</div>
+              <div className="text-xs text-gray-500 mt-1">Losing</div>
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-center">
-              <div className={`text-2xl font-bold ${tradeData.stats.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
-                {tradeData.stats.winRate != null ? `${tradeData.stats.winRate.toFixed(0)}%` : '—'}
+              <div className={tradeData.stats.winRate >= 50 ? 'text-2xl font-bold text-green-400' : 'text-2xl font-bold text-red-400'}>
+                {tradeData.stats.winRate != null ? tradeData.stats.winRate.toFixed(0) + '%' : '—'}
               </div>
               <div className="text-xs text-gray-500 mt-1">Win Rate</div>
             </div>
+            <div className={tradeData.stats.totalGainPct >= 0 ? 'border-green-800 bg-green-950/20 rounded-xl p-4 text-center border' : 'border-red-800 bg-red-950/20 rounded-xl p-4 text-center border'}>
+              <div className={tradeData.stats.totalGainPct >= 0 ? 'text-2xl font-bold text-green-400' : 'text-2xl font-bold text-red-400'}>
+                {(tradeData.stats.totalGainPct >= 0 ? '+' : '') + tradeData.stats.totalGainPct.toFixed(2) + '%'}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Lifetime Gain</div>
+            </div>
           </div>
 
-          {/* Last 20 trades */}
-          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3">Recent Trades</h2>
+          <h2 className="text-gray-400 text-sm font-semibold uppercase tracking-wide mb-3">Recent Closed Positions</h2>
           {tradeData.trades.length === 0 ? (
-            <div className="text-gray-600 text-center py-8 border border-gray-800 rounded-xl">No trades yet</div>
+            <div className="text-gray-600 text-center py-8 border border-gray-800 rounded-xl">No closed trades yet</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
               {tradeData.trades.map((t) => {
-                const isSell = t.type === 'SELL';
-                const hasPnl = t.pnlPct != null;
-                const up     = (t.pnlPct ?? 0) >= 0;
+                const up = t.pnlPct >= 0;
+                const borderClass = up ? 'border-green-900' : 'border-red-900';
+                const bgClass = up ? 'bg-green-950/30' : 'bg-red-950/30';
+                const textClass = up ? 'text-green-400' : 'text-red-400';
                 return (
-                  <div
-                    key={t.id}
-                    className={`rounded-xl border p-3 flex flex-col gap-1
-                      ${isSell
-                        ? up ? 'border-green-900 bg-green-950/30' : 'border-red-900 bg-red-950/30'
-                        : 'border-gray-800 bg-gray-900/40'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-white text-sm">${t.ticker}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold
-                        ${isSell ? 'bg-red-900 text-red-300' : 'bg-green-900 text-green-300'}`}>
-                        {t.type}
-                      </span>
+                  <div key={t.id} className={'rounded-xl border p-3 text-center ' + borderClass + ' ' + bgClass}>
+                    <div className="font-bold text-white text-sm mb-1">${t.ticker}</div>
+                    <div className={'text-lg font-mono font-bold ' + textClass}>
+                      {(up ? '+' : '') + t.pnlPct.toFixed(2) + '%'}
                     </div>
-                    {isSell && hasPnl && (
-                      <div className={`text-sm font-mono font-bold ${up ? 'text-green-400' : 'text-red-400'}`}>
-                        {up ? '+' : ''}{t.pnlPct.toFixed(2)}%
-                      </div>
-                    )}
-                    {!isSell && (
-                      <div className="text-xs text-gray-500">
-                        {Math.abs(t.solSpent).toFixed(3)} SOL
-                      </div>
-                    )}
                   </div>
                 );
               })}

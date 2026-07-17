@@ -43,22 +43,23 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/portfolio/trades — last 20 trades + win/loss stats
+// GET /api/portfolio/trades — closed trades (sells) + win/loss stats
 router.get('/trades', authenticate, async (req, res) => {
   try {
     const txns = await prisma.transaction.findMany({
-      where:   { userId: req.userId },
+      where:   { userId: req.userId, type: 'SELL' },
       include: { coin: { select: { ticker: true, name: true } } },
       orderBy: { createdAt: 'desc' },
-      take:    100, // pull more to compute accurate stats
+      take:    100,
     });
 
     // Win/loss stats from all SELL transactions
-    const sells = txns.filter((t) => t.type === 'SELL' && t.pnlPct != null);
+    const sells = txns.filter((t) => t.pnlPct != null);
     const wins  = sells.filter((t) => t.pnlPct > 0).length;
     const losses = sells.filter((t) => t.pnlPct <= 0).length;
     const total  = wins + losses;
     const winRate = total > 0 ? (wins / total) * 100 : null;
+    const totalGainPct = sells.reduce((s, t) => s + (t.pnlPct ?? 0), 0);
     const avgWinPct  = wins > 0
       ? sells.filter(t => t.pnlPct > 0).reduce((s, t) => s + t.pnlPct, 0) / wins
       : 0;
@@ -66,19 +67,17 @@ router.get('/trades', authenticate, async (req, res) => {
       ? sells.filter(t => t.pnlPct <= 0).reduce((s, t) => s + t.pnlPct, 0) / losses
       : 0;
 
-    // Last 20 trades (all types)
+    // Last 20 closed trades
     const last20 = txns.slice(0, 20).map((t) => ({
       id:        t.id,
-      type:      t.type,
       ticker:    t.coin.ticker,
       name:      t.coin.name,
-      pnlPct:    t.pnlPct ?? null,
-      solSpent:  t.solSpent,
+      pnlPct:    t.pnlPct ?? 0,
       createdAt: t.createdAt,
     }));
 
     res.json({
-      stats: { wins, losses, total, winRate, avgWinPct, avgLossPct },
+      stats: { wins, losses, total, winRate, totalGainPct, avgWinPct, avgLossPct },
       trades: last20,
     });
   } catch (err) {
