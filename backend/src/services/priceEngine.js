@@ -87,8 +87,13 @@ function _updatePhase(s) {
 
   if (phase === 'pump') {
     const isLegend = s.ceiling >= 10_000_000;
-    // High-MC runners enter consolidation periods - back-and-forth fighting
-    if (s.fate === 'runner' && marketCap > 500_000 && Math.random() < 0.0012) {
+    // Any pumping coin can enter consolidation - back-and-forth fighting
+    // Runners: frequent + starts low MC | Pumpers: moderate | Bleeders: rare + only mid-range
+    const consolidationChance =
+      s.fate === 'runner'  ? (marketCap > 5_000   ? 0.0018 : 0) :
+      s.fate === 'pumper'  ? (marketCap > 10_000  ? 0.0012 : 0) :
+      /* bleeder */          (marketCap > 20_000  ? 0.0006 : 0);
+    if (consolidationChance > 0 && Math.random() < consolidationChance) {
       s.phase = 'consolidation';
       s.consolidationStart = Date.now();
       return;
@@ -110,10 +115,15 @@ function _updatePhase(s) {
     const elapsed = s.consolidationStart ? (Date.now() - s.consolidationStart) / 1000 : 999;
     const duration = 45 + Math.random() * 90; // 45-135 seconds of fighting
     if (elapsed > duration) {
-      if (s.fate === 'runner' && Math.random() < 0.55) {
-        s.phase = 'pump'; // continuation - bulls win
+      // Continuation chance by fate: runners mostly continue, bleeders mostly top out
+      const continuationChance =
+        s.fate === 'runner'  ? 0.60 :
+        s.fate === 'pumper'  ? 0.40 :
+        /* bleeder */          0.20;
+      if (Math.random() < continuationChance) {
+        s.phase = 'pump'; // bulls win — continuation
       } else {
-        s.phase = 'distribution'; // bears win, time to roll over
+        s.phase = 'distribution'; // bears win — roll over
       }
       s.consolidationStart = null;
     }
@@ -410,7 +420,7 @@ function _bootstrap(coin) {
     // Stall: coin goes sideways and looks dead until it wakes up or dies
     stalled:     Math.random() < stallProb,
     // Simulated holder count
-    holderCount:        Math.floor(1 + Math.random() * 2), // 1–3 at birth
+    holderCount:        Math.floor(1 + Math.random() * 2), // 1-3 at birth
     consolidationStart: null,
   };
 }
