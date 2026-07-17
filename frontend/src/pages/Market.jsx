@@ -11,8 +11,9 @@ const ABOUT_TO_MIGRATE    = 50_000;
 /** Format market cap as abbreviated string: $1.2K, $24.5K, $1.2M */
 function fmtMC(mc) {
   if (mc == null) return '—';
-  if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(1)}M`;
-  if (mc >= 1_000)     return `$${(mc / 1_000).toFixed(1)}K`;
+  if (mc >= 1_000_000_000) return `$${(mc / 1_000_000_000).toFixed(2)}B`;
+  if (mc >= 1_000_000)     return `$${(mc / 1_000_000).toFixed(1)}M`;
+  if (mc >= 1_000)         return `$${(mc / 1_000).toFixed(1)}K`;
   return `$${mc.toFixed(0)}`;
 }
 

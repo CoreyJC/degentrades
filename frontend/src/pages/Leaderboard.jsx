@@ -6,8 +6,9 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 const SOL_USD = 150;
 function fmtUSD(sol) {
   const usd = sol * SOL_USD;
-  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
-  if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(2)}K`;
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(2)}B`;
+  if (usd >= 1_000_000)     return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000)         return `$${(usd / 1_000).toFixed(2)}K`;
   return `$${usd.toFixed(2)}`;
 }
 

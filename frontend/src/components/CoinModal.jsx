@@ -18,8 +18,9 @@ function fmt(p) {
 
 function fmtMC(mc) {
   if (mc == null) return '—';
-  if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(1)}M`;
-  if (mc >= 1_000)     return `$${(mc / 1_000).toFixed(1)}K`;
+  if (mc >= 1_000_000_000) return `$${(mc / 1_000_000_000).toFixed(2)}B`;
+  if (mc >= 1_000_000)     return `$${(mc / 1_000_000).toFixed(1)}M`;
+  if (mc >= 1_000)         return `$${(mc / 1_000).toFixed(1)}K`;
   return `$${mc.toFixed(0)}`;
 }
 
@@ -158,7 +159,8 @@ export default function CoinModal({ coinId, onClose }) {
           timeScale:       { borderColor: '#1f2937', timeVisible: true },
           localization:    {
             priceFormatter: (p) => {
-              if (p >= 1_000_000) return `$${(p / 1_000_000).toFixed(2)}M`;
+              if (p >= 1_000_000_000) return `$${(p / 1_000_000_000).toFixed(2)}B`;
+              if (p >= 1_000_000)     return `$${(p / 1_000_000).toFixed(2)}M`;
               if (p >= 1_000)    return `$${(p / 1_000).toFixed(1)}K`;
               return `$${p.toFixed(0)}`;
             },

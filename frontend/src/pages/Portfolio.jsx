@@ -8,15 +8,17 @@ const TOTAL_SUPPLY = 1_000_000_000;
 
 function fmtUSD(sol) {
   const usd = sol * SOL_USD;
-  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
-  if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(2)}K`;
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(2)}B`;
+  if (usd >= 1_000_000)     return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000)         return `$${(usd / 1_000).toFixed(2)}K`;
   return `$${usd.toFixed(2)}`;
 }
 
 function fmtMC(price) {
   const mc = price * TOTAL_SUPPLY;
-  if (mc >= 1_000_000) return `$${(mc / 1_000_000).toFixed(2)}M`;
-  if (mc >= 1_000)     return `$${(mc / 1_000).toFixed(1)}K`;
+  if (mc >= 1_000_000_000) return `$${(mc / 1_000_000_000).toFixed(2)}B`;
+  if (mc >= 1_000_000)     return `$${(mc / 1_000_000).toFixed(2)}M`;
+  if (mc >= 1_000)         return `$${(mc / 1_000).toFixed(1)}K`;
   return `$${mc.toFixed(0)}`;
 }
 

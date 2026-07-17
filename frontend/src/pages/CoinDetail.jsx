@@ -146,8 +146,9 @@ export default function CoinDetail() {
           timeScale:       { borderColor: '#1f2937', timeVisible: true },
           localization: {
             priceFormatter: (p) => {
-              if (p >= 1_000_000) return `$${(p / 1_000_000).toFixed(2)}M`;
-              if (p >= 1_000)    return `$${(p / 1_000).toFixed(1)}K`;
+              if (p >= 1_000_000_000) return `$${(p / 1_000_000_000).toFixed(2)}B`;
+              if (p >= 1_000_000)     return `$${(p / 1_000_000).toFixed(2)}M`;
+              if (p >= 1_000)         return `$${(p / 1_000).toFixed(1)}K`;
               return `$${p.toFixed(0)}`;
             },
           },
