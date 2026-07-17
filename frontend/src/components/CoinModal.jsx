@@ -335,9 +335,9 @@ export default function CoinModal({ coinId, onClose }) {
     } finally { setBusy(false); }
   }
 
-  async function sell(sellAll = false) {
+  async function sell(sellAll = false, overrideAmount = null) {
     if (!requireAuth()) return;
-    const amt = parseFloat(coinAmt);
+    const amt = overrideAmount ?? parseFloat(coinAmt);
     if (!sellAll && (!amt || amt <= 0)) return push('Enter a valid amount', 'error');
     setBusy(true);
     try {
@@ -354,6 +354,16 @@ export default function CoinModal({ coinId, onClose }) {
     } catch (e) {
       push(e.response?.data?.error ?? 'Sell failed', 'error');
     } finally { setBusy(false); }
+  }
+
+  function sellPercentage(pct) {
+    if (!holding) return;
+    if (pct === 100) {
+      sell(true); // use exact DB amount
+    } else {
+      const amount = holding.amount * (pct / 100);
+      sell(false, amount); // sell specific percentage
+    }
   }
 
   const pnl    = holding && price != null ? (price - holding.avgBuyPrice) * holding.amount : null;
@@ -561,7 +571,7 @@ export default function CoinModal({ coinId, onClose }) {
                             {[10, 25, 50, 75, 100].map((pct) => (
                               <button
                                 key={pct}
-                                onClick={() => pct === 100 ? sell(true) : setCoinAmt((holding.amount * pct / 100).toExponential(6))}
+                                onClick={() => sellPercentage(pct)}
                                 className={`flex-1 text-xs py-1.5 rounded-lg border transition-all
                                   ${pct === 100
                                     ? 'border-red-800 bg-red-950/40 text-red-400 hover:bg-red-900/40'
