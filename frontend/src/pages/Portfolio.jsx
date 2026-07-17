@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { useSocket } from '../context/SocketContext';
 
+const SOL_USD = 150; // fixed rate for simulator display
+function fmtUSD(sol) {
+  const usd = sol * SOL_USD;
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(2)}K`;
+  return `$${usd.toFixed(2)}`;
+}
+
 function fmt(p) {
   if (p == null) return '—';
   if (p < 0.000001) return p.toExponential(3);
@@ -77,16 +85,17 @@ export default function Portfolio() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Total Value',    val: `${data.totalValue.toFixed(4)} SOL` },
-          { label: 'SOL Balance',    val: `${data.solBalance.toFixed(4)} SOL` },
-          { label: 'Holdings Value', val: `${data.holdingsValue.toFixed(4)} SOL` },
-          { label: 'Gain vs Start',  val: `${isUp ? '+' : ''}${data.gainPct.toFixed(2)}%`, up: isUp },
-        ].map(({ label, val, up }) => (
+          { label: 'Total Value',    val: fmtUSD(data.totalValue),    sub: `${data.totalValue.toFixed(2)} SOL` },
+          { label: 'SOL Balance',    val: fmtUSD(data.solBalance),    sub: `${data.solBalance.toFixed(2)} SOL` },
+          { label: 'Holdings Value', val: fmtUSD(data.holdingsValue), sub: `${data.holdingsValue.toFixed(2)} SOL` },
+          { label: 'Gain vs Start',  val: `${isUp ? '+' : ''}${data.gainPct.toFixed(2)}%`, sub: fmtUSD(data.totalValue - 100), up: isUp },
+        ].map(({ label, val, sub, up }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <div className="text-xs text-gray-500 mb-1">{label}</div>
             <div className={`text-lg font-bold font-mono ${up === false ? 'text-red-400' : up ? 'text-green-400' : 'text-white'}`}>
               {val}
             </div>
+            {sub && <div className="text-xs text-gray-600 mt-0.5 font-mono">{sub}</div>}
           </div>
         ))}
       </div>
@@ -131,7 +140,8 @@ export default function Portfolio() {
                       {fmt(h.coin.currentPrice)}
                     </td>
                     <td className="py-3 text-right font-mono text-gray-300">
-                      {(h.currentValue ?? 0).toFixed(4)} SOL
+                      {fmtUSD(h.currentValue ?? 0)}
+                      <div className="text-xs text-gray-600">{(h.currentValue ?? 0).toFixed(3)} SOL</div>
                     </td>
                     <td className={`py-3 text-right font-mono pr-2 ${up ? 'text-green-400' : 'text-red-400'}`}>
                       {up ? '+' : ''}{(h.pnl ?? 0).toFixed(4)}

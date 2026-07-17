@@ -3,6 +3,13 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
+const SOL_USD = 150;
+function fmtUSD(sol) {
+  const usd = sol * SOL_USD;
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(2)}K`;
+  return `$${usd.toFixed(2)}`;
+}
 
 export default function Leaderboard() {
   const { user } = useAuth();
@@ -47,7 +54,7 @@ export default function Leaderboard() {
                 {row.username} {isMe && <span className="text-xs text-indigo-500">(you)</span>}
               </span>
               <span className="font-mono text-gray-400 text-sm">
-                {row.currentValue.toFixed(4)} SOL
+                {fmtUSD(row.currentValue)}
               </span>
               <span className={`font-mono font-bold text-sm w-20 text-right
                 ${up ? 'text-green-400' : 'text-red-400'}`}>
