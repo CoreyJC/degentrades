@@ -76,7 +76,7 @@ function SectionHeader({ emoji, title, count, subtitle }) {
 export default function Market() {
   const { socket }  = useSocket();
   const { push }    = useToast();
-  const { coins, loading, error } = useCoins(socket, push);
+  const { coins, loading, error, refresh, lastRefresh } = useCoins(socket, push);
   const [search, setSearch] = useState('');
   const [selectedCoinId, setSelectedCoinId] = useState(null);
 
@@ -116,14 +116,24 @@ export default function Market() {
             {coins.length} tokens live · New tokens spawn every 30s · Prices update every 2s
           </p>
         </div>
-        <input
-          type="text"
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-gray-900 border border-gray-700 text-white placeholder-gray-600
-            rounded-lg px-3 py-2 text-sm w-48 focus:outline-none focus:border-gray-500"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-gray-900 border border-gray-700 text-white placeholder-gray-600
+              rounded-lg px-3 py-2 text-sm w-48 focus:outline-none focus:border-gray-500"
+          />
+          <button
+            onClick={refresh}
+            title="Refresh market"
+            className="bg-gray-900 border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white
+              rounded-lg px-3 py-2 text-sm transition-colors flex items-center gap-1.5"
+          >
+            🔄 {lastRefresh ? lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {loading ? (

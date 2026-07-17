@@ -127,7 +127,7 @@ export default function CoinModal({ coinId, onClose }) {
           crosshair:       { mode: CrosshairMode.Normal },
           rightPriceScale: { borderColor: '#1f2937' },
           timeScale:       { borderColor: '#1f2937', timeVisible: true },
-          width:           chartElRef.current.clientWidth || 600,
+          autoSize:        true,
           height:          280,
         });
         chartRef.current = chart;
@@ -151,12 +151,7 @@ export default function CoinModal({ coinId, onClose }) {
           })
           .catch(() => {});
 
-        ro = new ResizeObserver(() => {
-          if (chartElRef.current && chart) {
-            chart.applyOptions({ width: chartElRef.current.clientWidth });
-          }
-        });
-        ro.observe(chartElRef.current);
+        // autoSize handles resize — no manual ResizeObserver needed
       } catch (err) {
         console.error('Chart init error:', err);
       }

@@ -1,35 +1,26 @@
-/**
- * useCoins
- *
- * Loads the initial coin list from REST, then keeps it live via:
- *   price_update  → update currentPrice + marketCap + change24h on each coin
- *   coin_added    → prepend new coin to the list + toast
- *   coin_deleted  → remove coin from list + "RUGGED" toast
- *   coin_migrated → mark coin as migrated + toast
- */
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 const TOTAL_SUPPLY = 1_000_000_000;
 
 export function useCoins(socket, pushToast) {
-  const [coins,   setCoins]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [coins,       setCoins]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
-  // Track initial prices for 24h-change calculation (oldest price we've seen)
-  const seedPrices = useRef({}); // coinId → first-seen price
+  const seedPrices = useRef({});
 
-  // ── Initial load ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    axios.get('/api/coins')
+  // ── Fetch / refresh ─────────────────────────────────────────────────────────
+  const refresh = useCallback(() => {
+    return axios.get('/api/coins')
       .then(({ data }) => {
         setCoins(data);
         data.forEach((c) => {
           if (!seedPrices.current[c.id]) seedPrices.current[c.id] = c.currentPrice;
         });
         setLoading(false);
+        setLastRefresh(new Date());
       })
       .catch((err) => {
         setError(err.message);
@@ -37,33 +28,31 @@ export function useCoins(socket, pushToast) {
       });
   }, []);
 
+  // Initial load + auto-refresh every 30s
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
   // ── Socket events ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
-    // Live price ticks
     function onPriceUpdate(updates) {
       setCoins((prev) =>
         prev.map((coin) => {
           const u = updates[coin.id];
           if (!u) return coin;
-
           const seed = seedPrices.current[coin.id] ?? u.price;
           const change24h = seed > 0
             ? parseFloat((((u.price - seed) / seed) * 100).toFixed(2))
             : 0;
-
-          return {
-            ...coin,
-            currentPrice: u.price,
-            marketCap: u.marketCap ?? u.price * TOTAL_SUPPLY,
-            change24h,
-          };
+          return { ...coin, currentPrice: u.price, marketCap: u.marketCap ?? u.price * TOTAL_SUPPLY, change24h };
         })
       );
     }
 
-    // New coin spawned
     function onCoinAdded(coin) {
       seedPrices.current[coin.id] = coin.currentPrice;
       setCoins((prev) => {
@@ -73,7 +62,6 @@ export function useCoins(socket, pushToast) {
       pushToast?.(`🪙 New token: ${coin.name} (${coin.ticker})`, 'new', 5000);
     }
 
-    // Coin rugged and deleted
     function onCoinDeleted({ coinId, name, ticker, finalPrice }) {
       setCoins((prev) => prev.filter((c) => c.id !== coinId));
       delete seedPrices.current[coinId];
@@ -81,7 +69,6 @@ export function useCoins(socket, pushToast) {
       pushToast?.(`💀 RUGGED: ${name} (${ticker})${priceStr}`, 'rug', 6000);
     }
 
-    // Coin crossed $30K MC — moves to Just Migrated, keeps trading
     function onCoinMigrated({ coinId, name, ticker, marketCap }) {
       setCoins((prev) =>
         prev.map((coin) =>
@@ -107,5 +94,5 @@ export function useCoins(socket, pushToast) {
     };
   }, [socket, pushToast]);
 
-  return { coins, loading, error };
+  return { coins, loading, error, refresh, lastRefresh };
 }
