@@ -359,12 +359,35 @@ async function _rugCoin(coinId, finalPrice) {
     const s = state[coinId];
     console.log(`💀 RUG: ${coin.name} (${coin.ticker}) [${s?.fate ?? '?'}/${s?.phase ?? '?'}] $${finalPrice.toExponential(2)}`);
 
+    // Find all holders so we can log a RUG transaction for each
+    const holdings = await prisma.holding.findMany({ where: { coinId } });
+
     await prisma.coin.update({ where: { id: coinId }, data: { isActive: false } });
     if (io) io.emit('coin_deleted', { coinId, name: coin.name, ticker: coin.ticker, finalPrice });
     removeCoin(coinId);
 
+    // Build RUG close transactions for every holder
+    const rugTxns = holdings.map((h) => {
+      const pnlPct = h.avgBuyPrice > 0
+        ? ((finalPrice - h.avgBuyPrice) / h.avgBuyPrice) * 100
+        : -100;
+      return prisma.transaction.create({
+        data: {
+          userId:      h.userId,
+          coinId,
+          type:        'RUG',
+          amount:      h.amount,
+          price:       finalPrice,
+          solSpent:    0,
+          avgBuyPrice: h.avgBuyPrice,
+          pnlPct,
+        },
+      });
+    });
+
     await prisma.$transaction([
-      prisma.transaction.deleteMany({ where: { coinId } }),
+      ...rugTxns,
+      prisma.transaction.deleteMany({ where: { coinId, type: { not: 'RUG' } } }),
       prisma.holding.deleteMany({ where: { coinId } }),
       prisma.coin.delete({ where: { id: coinId } }),
     ]);

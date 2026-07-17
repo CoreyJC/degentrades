@@ -47,7 +47,7 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/trades', authenticate, async (req, res) => {
   try {
     const txns = await prisma.transaction.findMany({
-      where:   { userId: req.userId, type: 'SELL' },
+      where:   { userId: req.userId, type: { in: ['SELL', 'RUG'] } },
       include: { coin: { select: { ticker: true, name: true } } },
       orderBy: { createdAt: 'desc' },
       take:    100,
@@ -70,6 +70,7 @@ router.get('/trades', authenticate, async (req, res) => {
     // Last 20 closed trades
     const last20 = txns.slice(0, 20).map((t) => ({
       id:        t.id,
+      type:      t.type,
       ticker:    t.coin.ticker,
       name:      t.coin.name,
       pnlPct:    t.pnlPct ?? 0,

@@ -208,16 +208,17 @@ export default function Portfolio() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2">
               {tradeData.trades.map((t) => {
+                const isRug = t.type === 'RUG';
                 const up = t.pnlPct >= 0;
-                const borderClass = up ? 'border-green-900' : 'border-red-900';
-                const bgClass = up ? 'bg-green-950/30' : 'bg-red-950/30';
-                const textClass = up ? 'text-green-400' : 'text-red-400';
                 return (
-                  <div key={t.id} className={'rounded-xl border p-3 text-center ' + borderClass + ' ' + bgClass}>
-                    <div className="font-bold text-white text-sm mb-1">${t.ticker}</div>
-                    <div className={'text-lg font-mono font-bold ' + textClass}>
+                  <div key={t.id} className={'rounded-xl border p-3 text-center ' + (isRug ? 'border-red-800 bg-red-950/40' : up ? 'border-green-900 bg-green-950/30' : 'border-red-900 bg-red-950/30')}>
+                    <div className="font-bold text-white text-sm mb-1">
+                      {isRug ? '💀 ' : ''}{t.ticker}
+                    </div>
+                    <div className={'text-lg font-mono font-bold ' + (up ? 'text-green-400' : 'text-red-400')}>
                       {(up ? '+' : '') + t.pnlPct.toFixed(2) + '%'}
                     </div>
+                    {isRug && <div className="text-xs text-red-500 mt-0.5 font-semibold">RUGGED</div>}
                   </div>
                 );
               })}
