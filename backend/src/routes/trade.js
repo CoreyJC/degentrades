@@ -5,6 +5,9 @@ const priceEngine = require('../services/priceEngine');
 
 const router = express.Router();
 
+const GAS_FEE      = 0.000025; // flat Solana network fee per tx
+const PROTOCOL_FEE = 0.01;     // 1% pump.fun-style protocol fee
+
 // POST /api/trade/buy
 router.post('/buy', authenticate, async (req, res) => {
   const { coinId, solAmount } = req.body;
@@ -22,8 +25,11 @@ router.post('/buy', authenticate, async (req, res) => {
 
     const currentPrice = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
 
-    if (portfolio.solBalance < solAmount) {
-      return res.status(400).json({ error: 'Insufficient SOL balance' });
+    const protocolFee  = solAmount * PROTOCOL_FEE;
+    const totalCost    = solAmount + protocolFee + GAS_FEE;
+
+    if (portfolio.solBalance < totalCost) {
+      return res.status(400).json({ error: 'Insufficient SOL balance (include fees)' });
     }
 
     const coinsReceived = solAmount / currentPrice;
@@ -46,7 +52,7 @@ router.post('/buy', authenticate, async (req, res) => {
     await prisma.$transaction([
       prisma.portfolio.update({
         where: { userId: req.userId },
-        data: { solBalance: { decrement: solAmount } },
+        data: { solBalance: { decrement: totalCost } },
       }),
       prisma.holding.upsert({
         where: { userId_coinId: { userId: req.userId, coinId } },
@@ -74,8 +80,11 @@ router.post('/buy', authenticate, async (req, res) => {
       coinsReceived,
       price: currentPrice,
       newPrice,
-      solSpent: solAmount,
-      newSolBalance: portfolio.solBalance - solAmount,
+      solSpent:     solAmount,
+      protocolFee,
+      gasFee:       GAS_FEE,
+      totalCost,
+      newSolBalance: portfolio.solBalance - totalCost,
     });
   } catch (err) {
     console.error(err);
@@ -114,7 +123,9 @@ router.post('/sell', authenticate, async (req, res) => {
     }
 
     const currentPrice  = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
-    const solReceived   = actualAmount * currentPrice;
+    const grossReceived = actualAmount * currentPrice;
+    const protocolFee   = grossReceived * PROTOCOL_FEE;
+    const solReceived   = grossReceived - protocolFee - GAS_FEE;
     const newAmount     = holding.amount - actualAmount;
     const sellPnlPct    = holding.avgBuyPrice > 0
       ? ((currentPrice - holding.avgBuyPrice) / holding.avgBuyPrice) * 100
@@ -153,9 +164,12 @@ router.post('/sell', authenticate, async (req, res) => {
 
     res.json({
       success: true,
-      coinsSold: coinAmount,
-      price: currentPrice,
+      coinsSold:    actualAmount,
+      price:        currentPrice,
       newPrice,
+      grossReceived,
+      protocolFee,
+      gasFee:       GAS_FEE,
       solReceived,
     });
   } catch (err) {

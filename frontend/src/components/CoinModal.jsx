@@ -525,18 +525,32 @@ export default function CoinModal({ coinId, onClose }) {
                     </div>
 
                     {/* Estimate */}
-                    {solAmt && parseFloat(solAmt) > 0 && price > 0 && (
-                      <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">You receive</span>
-                          <span className="text-white font-mono">{(parseFloat(solAmt) / price).toExponential(3)} {coin.ticker}</span>
+                    {solAmt && parseFloat(solAmt) > 0 && price > 0 && (() => {
+                      const sol = parseFloat(solAmt);
+                      const fee = sol * 0.01;
+                      const gas = 0.000025;
+                      const total = sol + fee + gas;
+                      return (
+                        <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">You receive</span>
+                            <span className="text-white font-mono">{fmtTokens(sol / price)} {coin.ticker}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Protocol fee (1%)</span>
+                            <span className="text-yellow-500 font-mono">-{fee.toFixed(6)} SOL</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Gas</span>
+                            <span className="text-yellow-500 font-mono">-0.000025 SOL</span>
+                          </div>
+                          <div className="flex justify-between text-xs border-t border-gray-700 pt-1 mt-1">
+                            <span className="text-gray-400 font-semibold">Total cost</span>
+                            <span className="text-white font-mono font-semibold">{total.toFixed(6)} SOL</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">USD value</span>
-                          <span className="text-gray-400 font-mono">${(parseFloat(solAmt) * 150).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <button
                       onClick={buy} disabled={busy || !solAmt || parseFloat(solAmt) <= 0}
@@ -609,18 +623,32 @@ export default function CoinModal({ coinId, onClose }) {
                     </div>
 
                     {/* Estimate */}
-                    {coinAmt && parseFloat(coinAmt) > 0 && price > 0 && (
-                      <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">You receive</span>
-                          <span className="text-white font-mono">{(parseFloat(coinAmt) * price).toFixed(4)} SOL</span>
+                    {coinAmt && parseFloat(coinAmt) > 0 && price > 0 && (() => {
+                      const gross = parseFloat(coinAmt) * price;
+                      const fee   = gross * 0.01;
+                      const gas   = 0.000025;
+                      const net   = gross - fee - gas;
+                      return (
+                        <div className="bg-gray-800/50 rounded-lg px-3 py-2 mb-3 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Gross proceeds</span>
+                            <span className="text-white font-mono">{gross.toFixed(6)} SOL</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Protocol fee (1%)</span>
+                            <span className="text-yellow-500 font-mono">-{fee.toFixed(6)} SOL</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">Gas</span>
+                            <span className="text-yellow-500 font-mono">-0.000025 SOL</span>
+                          </div>
+                          <div className="flex justify-between text-xs border-t border-gray-700 pt-1 mt-1">
+                            <span className="text-gray-400 font-semibold">You receive</span>
+                            <span className="text-white font-mono font-semibold">{net.toFixed(6)} SOL</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">USD value</span>
-                          <span className="text-gray-400 font-mono">${(parseFloat(coinAmt) * price * 150).toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <button
                       onClick={sell}
