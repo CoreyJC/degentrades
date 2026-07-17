@@ -53,18 +53,23 @@ function _updatePhase(s) {
   if (phase === 'early') {
     // Transition to pump if 3x from start
     if (gainFromStart >= 3) { s.phase = 'pump'; return; }
-    // Bleeders that haven't pumped after 4 min go straight to bleed
-    if (ageMin > 4 && s.fate === 'bleeder' && gainFromStart < 1.5) {
+    // Bleeders that haven't pumped after 8 min go straight to bleed
+    if (ageMin > 8 && s.fate === 'bleeder' && gainFromStart < 1.5) {
       s.phase = 'bleed';
     }
   }
 
   if (phase === 'pump') {
-    // Once peaked and falling — distribution
-    if (gainFromStart >= 4 && athRatio < 0.85) { s.phase = 'distribution'; return; }
-    // Runners keep pumping longer; bleeders/pumpers exit pump phase quicker
-    const exitThreshold = s.fate === 'runner' ? 0.78 : 0.88;
-    if (athRatio < exitThreshold) s.phase = 'distribution';
+    // Runners stay in pump a long time — need significant gain + big drop from ATH
+    if (s.fate === 'runner') {
+      if (gainFromStart >= 10 && athRatio < 0.70) s.phase = 'distribution';
+    } else if (s.fate === 'pumper') {
+      if (gainFromStart >= 5 && athRatio < 0.75) s.phase = 'distribution';
+      else if (athRatio < 0.72) s.phase = 'distribution'; // big dip even early
+    } else {
+      // bleeder: exits pump after moderate gain + small dip
+      if (gainFromStart >= 3 && athRatio < 0.82) s.phase = 'distribution';
+    }
   }
 
   if (phase === 'distribution') {
@@ -104,40 +109,46 @@ function _nextPrice(coinId, s) {
 
   // ── PUMP phase ────────────────────────────────────────────────────────────
   if (phase === 'pump') {
-    const rugBase = fate === 'runner' ? 0.004 : fate === 'pumper' ? 0.008 : 0.014;
+    const rugBase = fate === 'runner' ? 0.002 : fate === 'pumper' ? 0.005 : 0.010;
 
     // Rug
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
 
-    // Mega pump (runner only)
+    // Mega pump — runners get big ones, pumpers get small ones
     if (fate === 'runner') {
+      t += 0.015;
+      if (roll < t) { s.momentum = Math.min(s.momentum + 0.5, 1.0); s.volatility = Math.min(s.volatility * 2, 5.0); return p * (1 + _rand(1.0, 5.0)); }
+    } else if (fate === 'pumper') {
       t += 0.008;
-      if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); s.volatility = Math.min(s.volatility * 2, 5.0); return p * (1 + _rand(0.8, 3.0)); }
+      if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); s.volatility = Math.min(s.volatility * 1.5, 5.0); return p * (1 + _rand(0.4, 1.5)); }
     }
 
     // Regular pump
-    const pumpChance = fate === 'runner' ? 0.18 : fate === 'pumper' ? 0.12 : 0.06;
+    const pumpChance = fate === 'runner' ? 0.22 : fate === 'pumper' ? 0.16 : 0.07;
     t += pumpChance;
-    if (roll < t) { s.momentum = Math.min(s.momentum + 0.3, 1.0); s.volatility = Math.min(s.volatility * 1.3, 5.0); return p * (1 + _rand(0.06, 0.25)); }
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.3, 1.0); s.volatility = Math.min(s.volatility * 1.2, 5.0); return p * (1 + _rand(0.06, 0.30)); }
 
     // Minor pump
-    const minorPumpChance = fate === 'runner' ? 0.20 : fate === 'pumper' ? 0.15 : 0.10;
+    const minorPumpChance = fate === 'runner' ? 0.22 : fate === 'pumper' ? 0.17 : 0.11;
     t += minorPumpChance;
-    if (roll < t) { s.momentum = Math.min(s.momentum + 0.1, 1.0); return p * (1 + _rand(0.02, 0.07)); }
+    if (roll < t) { s.momentum = Math.min(s.momentum + 0.15, 1.0); return p * (1 + _rand(0.02, 0.08)); }
 
-    // Normal (momentum-biased)
-    t += 0.45;
+    // Normal (momentum-biased upward in pump phase)
+    t += 0.42;
     if (roll < t) {
-      const upBias = fate === 'runner' ? 0.65 : fate === 'pumper' ? 0.55 : 0.45;
+      const upBias = fate === 'runner' ? 0.70 : fate === 'pumper' ? 0.60 : 0.48;
       const dir = Math.random() < upBias + momentum * 0.15 ? 1 : -1;
-      return Math.max(p * (1 + dir * _rand(0.003, 0.025) * s.volatility), 1e-14);
+      return Math.max(p * (1 + dir * _rand(0.003, 0.022) * s.volatility), 1e-14);
     }
 
-    // Dump / big dump (remainder)
-    const dump = roll < t + 0.08 ? _rand(0.02, 0.08) : _rand(0.08, 0.30);
+    // Minor dump
+    t += 0.08;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.15, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
+
+    // Dump (no big dump in pump phase — saves that for distribution/bleed)
     s.momentum = Math.max(s.momentum - 0.2, -1.0);
-    return Math.max(p * (1 - dump), 1e-14);
+    return Math.max(p * (1 - _rand(0.08, 0.20)), 1e-14);
   }
 
   // ── DISTRIBUTION — topping out, selling pressure ──────────────────────────
