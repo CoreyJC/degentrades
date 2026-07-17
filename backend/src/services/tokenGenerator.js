@@ -85,14 +85,9 @@ async function uniqueTicker(base) {
   }
 }
 
-/**
- * Log-uniform random starting price between $0.0000001 and $0.000010.
- * Max starting MC = $10K — coins must pump to reach the $69K migration threshold.
- */
+// All tokens start at exactly $1K MC (price = 1000 / 1e9)
 function randomStartingPrice() {
-  const logMin = Math.log(0.0000001);
-  const logMax = Math.log(0.000010);
-  return Math.exp(logMin + Math.random() * (logMax - logMin));
+  return 0.000001;
 }
 
 /**
