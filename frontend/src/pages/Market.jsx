@@ -4,8 +4,9 @@ import { useToast }  from '../context/ToastContext';
 import { useCoins }  from '../hooks/useCoins';
 import CoinModal     from '../components/CoinModal';
 
-const TOTAL_SUPPLY = 1_000_000_000;
-const NEW_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const TOTAL_SUPPLY        = 1_000_000_000;
+const MIGRATION_THRESHOLD = 30_000;
+const ABOUT_TO_MIGRATE    = 20_000;
 
 /** Format market cap as abbreviated string: $1.2K, $24.5K, $1.2M */
 function fmtMC(mc) {
@@ -79,8 +80,6 @@ export default function Market() {
   const [search, setSearch] = useState('');
   const [selectedCoinId, setSelectedCoinId] = useState(null);
 
-  const now = Date.now();
-
   const filtered = search
     ? coins.filter((c) =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -88,22 +87,20 @@ export default function Market() {
       )
     : coins;
 
-  // ── 🆕 New — created in last 5 min, newest first ─────────────────────────
-  const newCoins = filtered
-    .filter((c) => now - new Date(c.createdAt ?? 0).getTime() <= NEW_WINDOW_MS)
+  // ── 🟢 New Tokens — not migrated, MC < $20k, newest first
+  const newTokens = filtered
+    .filter((c) => !c.migrated && getMC(c) < ABOUT_TO_MIGRATE)
     .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
 
-  const newIds = new Set(newCoins.map((c) => c.id));
+  // ── 🔥 About to Migrate — not migrated, MC $20k–$30k
+  const aboutToMigrate = filtered
+    .filter((c) => !c.migrated && getMC(c) >= ABOUT_TO_MIGRATE && getMC(c) < MIGRATION_THRESHOLD)
+    .sort((a, b) => getMC(b) - getMC(a));
 
-  // ── 🔥 Pumping — non-new coins with positive or flat change, sorted best first
-  const pumping = filtered
-    .filter((c) => !newIds.has(c.id) && (c.change24h ?? 0) >= 0)
-    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0));
-
-  // ── 💀 Bleeding — non-new coins with negative change, sorted worst first
-  const bleeding = filtered
-    .filter((c) => !newIds.has(c.id) && (c.change24h ?? 0) < 0)
-    .sort((a, b) => (a.change24h ?? 0) - (b.change24h ?? 0));
+  // ── 🚀 Just Migrated — migrated, sorted by migratedAt DESC (no cap, tokens keep moving)
+  const justMigrated = filtered
+    .filter((c) => c.migrated)
+    .sort((a, b) => new Date(b.migratedAt ?? 0) - new Date(a.migratedAt ?? 0));
 
   if (error) return (
     <div className="max-w-4xl mx-auto p-8 text-red-400">Error: {error}</div>
@@ -134,57 +131,75 @@ export default function Market() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* ── 🆕 New ───────────────────────────────────────────────────────── */}
+          {/* ── 🟢 New Tokens ──────────────────────────────────────────────── */}
           <div>
             <SectionHeader
-              emoji="🆕"
-              title="New"
-              count={`${newCoins.length} tokens`}
-              subtitle="Just launched · Last 5 min"
+              emoji="🟢"
+              title="New Tokens"
+              count={`${newTokens.length} tokens`}
+              subtitle="MC < $20K · Newest first"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {newCoins.length === 0 ? (
+              {newTokens.length === 0 ? (
                 <div className="text-gray-600 text-sm text-center py-8">No new tokens</div>
               ) : (
-                newCoins.map((coin) => (
+                newTokens.map((coin) => (
                   <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}
             </div>
           </div>
 
-          {/* ── 🔥 Pumping ───────────────────────────────────────────────────── */}
+          {/* ── 🔥 About to Migrate ────────────────────────────────────────── */}
           <div>
             <SectionHeader
               emoji="🔥"
-              title="Pumping"
-              count={`${pumping.length} tokens`}
-              subtitle="Biggest gainers · 24h"
+              title="About to Migrate"
+              count={`${aboutToMigrate.length} tokens`}
+              subtitle="MC $20K–$30K · Closest to 🎓"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {pumping.length === 0 ? (
-                <div className="text-gray-600 text-sm text-center py-8">No gainers yet</div>
+              {aboutToMigrate.length === 0 ? (
+                <div className="text-gray-600 text-sm text-center py-8">None approaching yet</div>
               ) : (
-                pumping.map((coin) => (
-                  <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
-                ))
+                aboutToMigrate.map((coin) => {
+                  const mc  = getMC(coin);
+                  const pct = Math.min((mc / MIGRATION_THRESHOLD) * 100, 100).toFixed(1);
+                  return (
+                    <div key={coin.id}>
+                      <CoinCard coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
+                      <div className="px-4 pb-3 -mt-1 bg-gray-900 border border-t-0 border-gray-800 rounded-b-xl">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>Migration</span><span>{pct}%</span>
+                        </div>
+                        <div className="w-full bg-gray-800 rounded-full h-1.5">
+                          <div className="bg-green-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
 
-          {/* ── 💀 Bleeding ──────────────────────────────────────────────────── */}
+          {/* ── 🚀 Just Migrated ───────────────────────────────────────────── */}
           <div>
             <SectionHeader
-              emoji="💀"
-              title="Bleeding"
-              count={`${bleeding.length} tokens`}
-              subtitle="Biggest losers · 24h"
+              emoji="🚀"
+              title="Just Migrated"
+              count={`${justMigrated.length} tokens`}
+              subtitle="Crossed $30K · Still trading"
             />
             <div className="flex flex-col gap-3 overflow-y-auto max-h-[70vh] pr-1">
-              {bleeding.length === 0 ? (
-                <div className="text-gray-600 text-sm text-center py-8">No losers yet</div>
+              {justMigrated.length === 0 ? (
+                <div className="text-gray-600 text-sm text-center py-8">
+                  <div className="text-4xl mb-2">🎓</div>
+                  <div>No graduates yet</div>
+                  <div className="text-xs mt-1">First to $30K MC!</div>
+                </div>
               ) : (
-                bleeding.map((coin) => (
+                justMigrated.map((coin) => (
                   <CoinCard key={coin.id} coin={coin} onClick={() => setSelectedCoinId(coin.id)} />
                 ))
               )}

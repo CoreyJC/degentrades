@@ -20,6 +20,7 @@ const MAX_CANDLES          = 500;
 const TICK_MS              = 2000;
 const RUG_THRESHOLD        = 0.0000001;
 const TOTAL_SUPPLY         = 1_000_000_000;
+const MIGRATION_THRESHOLD  = 30_000; // $30K market cap
 
 // Base rug probability range per tick (0.5%–1%)
 const RUG_PROB_MIN = 0.005;
@@ -233,6 +234,13 @@ async function tick() {
 
     const marketCap = next * TOTAL_SUPPLY;
     updates[coinId] = { id: coinId, price: next, marketCap, candle: candles[candles.length - 1] };
+
+    // Migration check — mark once when MC crosses $30k, token keeps moving after
+    if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
+      s.migrated = true;
+      prisma.coin.update({ where: { id: coinId }, data: { migrated: true, migratedAt: new Date() } }).catch(() => {});
+      if (io) io.emit('coin_migrated', { coinId, name: s.name, ticker: s.ticker, marketCap });
+    }
 
     if (next <= RUG_THRESHOLD) rugged.push({ coinId, finalPrice: next });
   }
