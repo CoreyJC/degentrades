@@ -39,6 +39,25 @@ function _assignFate() {
   return 'runner';
 }
 
+// ── Ceiling assignment (personal MC cap before distribution kicks in) ──────────
+// Only runners can reach legendary ceilings — bleeders/pumpers stay near $69K.
+// Targets: ~1/100 coins reach $10M, ~1/1000 reach $100M, ~1/10000 reach $1B
+function _assignCeiling(fate) {
+  if (fate === 'bleeder') return MIGRATION_THRESHOLD;         // always $69K
+  if (fate === 'pumper') {
+    const r = Math.random();
+    if (r < 0.02) return 500_000;                            // 2% of pumpers → $500K
+    return MIGRATION_THRESHOLD;                              // rest $69K
+  }
+  // runner — rare tiers
+  const r = Math.random();
+  if (r < 0.002) return 1_000_000_000;                      // 0.2% of runners → $1B   (~1 in 5000 coins)
+  if (r < 0.020) return 100_000_000;                        // 1.8% of runners → $100M  (~1 in 555 coins)
+  if (r < 0.150) return 10_000_000;                         // 13% of runners  → $10M   (~1 in 77 coins)
+  if (r < 0.350) return 1_000_000;                          // 20% of runners  → $1M    (~1 in 28 coins)
+  return MIGRATION_THRESHOLD;                               // rest $69K
+}
+
 // ── Phase transition ───────────────────────────────────────────────────────────
 
 function _updatePhase(s) {
@@ -51,9 +70,8 @@ function _updatePhase(s) {
   const ageMin        = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
   const marketCap     = s.price * TOTAL_SUPPLY;
 
-  // Once a coin hits migration MC, it's peaked — force distribution
-  // Runners get a brief window above $69K but nothing crazy
-  if (marketCap >= MIGRATION_THRESHOLD && (phase === 'pump' || phase === 'early')) {
+  // Force distribution when coin hits its personal ceiling
+  if (marketCap >= s.ceiling && (phase === 'pump' || phase === 'early')) {
     s.phase = 'distribution';
     return;
   }
@@ -68,14 +86,16 @@ function _updatePhase(s) {
   }
 
   if (phase === 'pump') {
-    // Runners stay in pump a long time — need significant gain + big drop from ATH
+    const isLegend = s.ceiling >= 10_000_000;
     if (s.fate === 'runner') {
-      if (gainFromStart >= 10 && athRatio < 0.70) s.phase = 'distribution';
+      // Legends need much bigger gain + deeper dip before distribution
+      const gainNeeded = isLegend ? (s.ceiling / (s.startPrice * TOTAL_SUPPLY)) * 0.8 : 10;
+      const dipNeeded  = isLegend ? 0.55 : 0.70;
+      if (gainFromStart >= gainNeeded && athRatio < dipNeeded) s.phase = 'distribution';
     } else if (s.fate === 'pumper') {
       if (gainFromStart >= 5 && athRatio < 0.75) s.phase = 'distribution';
-      else if (athRatio < 0.72) s.phase = 'distribution'; // big dip even early
+      else if (athRatio < 0.72) s.phase = 'distribution';
     } else {
-      // bleeder: exits pump after moderate gain + small dip
       if (gainFromStart >= 3 && athRatio < 0.82) s.phase = 'distribution';
     }
   }
@@ -123,10 +143,16 @@ function _nextPrice(coinId, s) {
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
 
-    // Mega pump — runners get big ones, pumpers get small ones
+    // Mega pump — runners get big ones, scaled by ceiling
     if (fate === 'runner') {
-      t += 0.015;
-      if (roll < t) { s.momentum = Math.min(s.momentum + 0.5, 1.0); s.volatility = Math.min(s.volatility * 2, 5.0); return p * (1 + _rand(1.0, 5.0)); }
+      const isLegend = s.ceiling >= 10_000_000;
+      t += isLegend ? 0.025 : 0.015;
+      if (roll < t) {
+        s.momentum = Math.min(s.momentum + 0.5, 1.0);
+        s.volatility = Math.min(s.volatility * 2, 5.0);
+        const pumpMult = isLegend ? _rand(2.0, 8.0) : _rand(1.0, 5.0);
+        return p * (1 + pumpMult);
+      }
     } else if (fate === 'pumper') {
       t += 0.008;
       if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); s.volatility = Math.min(s.volatility * 1.5, 5.0); return p * (1 + _rand(0.4, 1.5)); }
@@ -256,6 +282,7 @@ function _nextPrice(coinId, s) {
 function _bootstrap(coin) {
   const startPrice = coin.currentPrice || 1e-7;
   const fate       = _assignFate();
+  const ceiling    = _assignCeiling(fate);
   const history    = [];
   const now        = Date.now();
   let p            = startPrice;
@@ -278,6 +305,7 @@ function _bootstrap(coin) {
     startPrice,
     ath:        startPrice,
     fate,
+    ceiling,
     phase:      'early',
     momentum:   0,
     volatility: 1.0,
