@@ -153,14 +153,35 @@ async function spawnCoin() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
+const INITIAL_POPULATION_TARGET = 80; // fill up fast on startup
+
+async function _bulkSpawn() {
+  try {
+    const count = await prisma.coin.count({ where: { isActive: true } });
+    const toSpawn = Math.max(0, INITIAL_POPULATION_TARGET - count);
+    if (toSpawn === 0) return;
+    console.log(`🏭  Bulk spawn: ${toSpawn} coins to reach ${INITIAL_POPULATION_TARGET} (currently ${count})`);
+    for (let i = 0; i < toSpawn; i++) {
+      await spawnCoin();
+      // small stagger so the price engine doesn't get slammed
+      await new Promise(r => setTimeout(r, 150));
+    }
+    console.log(`🏭  Bulk spawn complete — ${toSpawn} coins added`);
+  } catch (err) {
+    console.error('Bulk spawn error:', err.message);
+  }
+}
+
 let interval = null;
 let running  = false;
 
 function start() {
   if (running) return;
   running  = true;
+  // Populate immediately, then keep spawning every 10s
+  _bulkSpawn();
   interval = setInterval(spawnCoin, SPAWN_INTERVAL_MS);
-  console.log(`🏭  Token generator started — 1 coin every ${SPAWN_INTERVAL_MS / 1000}s`);
+  console.log(`🏭  Token generator started — 1 coin every ${SPAWN_INTERVAL_MS / 1000}s (target: ${INITIAL_POPULATION_TARGET} initial)`);
 }
 
 function stop() {

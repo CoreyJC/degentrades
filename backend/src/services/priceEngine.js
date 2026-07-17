@@ -79,8 +79,8 @@ function _updatePhase(s) {
   if (phase === 'early') {
     // Transition to pump if 3x from start
     if (gainFromStart >= 3) { s.phase = 'pump'; return; }
-    // Bleeders that haven't pumped after 8 min go straight to bleed
-    if (ageMin > 8 && s.fate === 'bleeder' && gainFromStart < 1.5) {
+    // Bleeders that haven't pumped after 20 min go straight to bleed
+    if (ageMin > 20 && s.fate === 'bleeder' && gainFromStart < 1.5) {
       s.phase = 'bleed';
     }
   }
@@ -105,7 +105,7 @@ function _updatePhase(s) {
   }
 
   if (phase === 'bleed') {
-    if (athRatio < 0.30) s.phase = 'dying';
+    if (athRatio < 0.15) s.phase = 'dying'; // need 85% off ATH to enter death spiral
   }
   // dying is terminal — no transitions out
 }
@@ -222,7 +222,8 @@ function _nextPrice(coinId, s) {
 
   // ── BLEED — slow grind down, occasional dead cat bounce ──────────────────
   if (phase === 'bleed') {
-    const rugBase = 0.025 + (ageMin > 15 ? 0.015 : 0);
+    // Reduced rug rate — bleeders deserve a slow death, not instant annihilation
+    const rugBase = 0.008 + (ageMin > 30 ? 0.006 : 0);
 
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
@@ -243,17 +244,17 @@ function _nextPrice(coinId, s) {
     if (roll < t) { s.momentum = Math.max(s.momentum - 0.2, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
 
     // Dump
-    t += 0.20;
-    if (roll < t) { s.momentum = Math.max(s.momentum - 0.3, -1.0); return Math.max(p * (1 - _rand(0.08, 0.22)), 1e-14); }
+    t += 0.22;
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.3, -1.0); return Math.max(p * (1 - _rand(0.06, 0.15)), 1e-14); }
 
-    // Big dump
+    // Big dump — softened, no more 50% single-tick wipeouts in bleed
     s.momentum = -1.0;
-    return Math.max(p * (1 - _rand(0.22, 0.50)), 1e-14);
+    return Math.max(p * (1 - _rand(0.12, 0.28)), 1e-14);
   }
 
   // ── DYING — death spiral, NO pumps, only down ─────────────────────────────
   if (phase === 'dying') {
-    const rugChance = Math.min(0.06 + ageMin * 0.004, 0.30); // accelerates with age
+    const rugChance = Math.min(0.02 + ageMin * 0.0008, 0.12); // slow burn — coins can linger in dying for a while
 
     t += rugChance;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.85, 0.99)), 1e-14); }
