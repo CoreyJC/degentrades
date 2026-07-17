@@ -425,29 +425,15 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
     s.volatility = Math.min(s.volatility * (1 + impactPct * 0.3), 5.0);
   }
 
-  // Update the last candle to reflect this trade immediately
-  const nowSec = Math.floor(Date.now() / 1000);
+  // Update the last candle in place — extend its wick and move the close
+  // Never create a new candle from a trade; let tick() own candle creation
   const history = s.history;
   if (history.length > 0) {
     const lastCandle = history[history.length - 1];
-    if (lastCandle.time === nowSec) {
-      // Same second — update the existing candle
-      lastCandle.high = Math.max(lastCandle.high, s.price);
-      lastCandle.low = Math.min(lastCandle.low, s.price);
-      lastCandle.close = s.price;
-      lastCandle.volume += Math.abs(impactPct) * 500; // volume spike for trade
-    } else {
-      // New second — create a new candle
-      history.push({
-        time: nowSec,
-        open: s.price,
-        high: s.price,
-        low: s.price,
-        close: s.price,
-        volume: Math.abs(impactPct) * 500,
-      });
-      if (history.length > MAX_CANDLES) history.shift();
-    }
+    lastCandle.high   = Math.max(lastCandle.high, s.price);
+    lastCandle.low    = Math.min(lastCandle.low,  s.price);
+    lastCandle.close  = s.price;
+    lastCandle.volume += Math.abs(impactPct) * 800; // visible volume spike
   }
 
   // Broadcast the impact immediately so the chart updates in real-time
