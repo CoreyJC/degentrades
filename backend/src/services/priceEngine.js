@@ -616,26 +616,23 @@ async function tick() {
 
     const marketCap = next * TOTAL_SUPPLY;
 
-    // ── Top holder % — dilutes slowly as coin pumps organically; bundled barely moves
-    if (s.topHolderPct == null) s.topHolderPct = 50; // guard for coins loaded before this feature
-    if (pctChange > 0.03 && s.topHolderPct > 1) {
-      const dilution = s.isBundled ? 0.05 : 0.30; // bundled: dev holds, organic: spreads out
-      s.topHolderPct = Math.max(1, s.topHolderPct - pctChange * dilution * 100);
-    }
-
     // ── Holder count — MC-driven target with smooth convergence ────────────
-    // Formula: ~10 * (MC/$1K)^0.75 gives realistic counts at every tier:
-    //   $1K→~10  $69K→~254  $1M→~1.8K  $10M→~10K  $100M→~56K  $1B→~316K
     const mcInK = marketCap / 1000;
     const targetHolders = Math.max(1, Math.floor(
-      10 * Math.pow(mcInK, 0.75) * (0.85 + Math.random() * 0.30) // ±15% noise
+      10 * Math.pow(mcInK, 0.75) * (0.85 + Math.random() * 0.30)
     ));
-    // On dumps, holders leave faster (panic selling)
     const pctChange = prev > 0 ? (next - prev) / prev : 0;
-    const convergenceRate = pctChange < -0.05 ? 0.25 : 0.12; // dump = faster exit
+    const convergenceRate = pctChange < -0.05 ? 0.25 : 0.12;
     s.holderCount = Math.max(1, Math.round(
       s.holderCount + (targetHolders - s.holderCount) * convergenceRate
     ));
+
+    // ── Top holder % — dilutes as coin pumps; bundled barely moves (dev holds)
+    if (s.topHolderPct == null) s.topHolderPct = s.isBundled ? 75 : 25;
+    if (pctChange > 0.03 && s.topHolderPct > 1) {
+      const dilution = s.isBundled ? 0.05 : 0.30;
+      s.topHolderPct = Math.max(1, s.topHolderPct - pctChange * dilution * 100);
+    }
 
     updates[coinId] = { id: coinId, price: next, marketCap, holderCount: s.holderCount, topHolderPct: parseFloat((s.topHolderPct ?? 50).toFixed(1)), isBundled: s.isBundled ?? false, candle: candles[candles.length - 1] };
 
