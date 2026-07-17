@@ -8,7 +8,8 @@ export function SocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const socket = io('/', { transports: ['websocket'] });
+    const backendUrl = import.meta.env.VITE_API_URL || '';
+    const socket = io(backendUrl, { transports: ['websocket'] });
     socketRef.current = socket;
 
     socket.on('connect',    () => setConnected(true));
