@@ -17,7 +17,7 @@
 const prisma = require('../lib/prisma');
 
 const MAX_CANDLES         = 500;
-const TICK_MS             = 2000;
+const TICK_MS             = 1000;
 const RUG_THRESHOLD       = 0.0000001;
 const TOTAL_SUPPLY        = 1_000_000_000;
 const MIGRATION_THRESHOLD = 69_000;
