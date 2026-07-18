@@ -279,7 +279,10 @@ export default function CoinDetail() {
     setBusy(true);
     try {
       const { data } = await axios.post('/api/trade/buy', { coinId: id, solAmount: sol });
-      push(`✅ Bought ${data.coinsReceived.toExponential(3)} ${coin.ticker}`, 'success');
+      const recvAmt = data.coinsReceived != null && isFinite(data.coinsReceived)
+        ? data.coinsReceived.toExponential(3)
+        : '?';
+      push(`✅ Bought ${recvAmt} ${coin.ticker}`, 'success');
       setSolAmt('');
       const portRes = await axios.get('/api/portfolio');
       setPortfolio(portRes.data);

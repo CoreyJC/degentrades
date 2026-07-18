@@ -25,6 +25,10 @@ router.post('/buy', authenticate, async (req, res) => {
 
     const currentPrice = priceEngine.getCurrentPrice(coinId) || coin.currentPrice;
 
+    if (!currentPrice || currentPrice <= 0 || !isFinite(currentPrice)) {
+      return res.status(400).json({ error: 'Unable to get current price — coin may have just rugged' });
+    }
+
     const protocolFee  = solAmount * PROTOCOL_FEE;
     const totalCost    = solAmount + protocolFee + GAS_FEE;
 
@@ -33,6 +37,10 @@ router.post('/buy', authenticate, async (req, res) => {
     }
 
     const coinsReceived = solAmount / currentPrice;
+
+    if (!isFinite(coinsReceived) || coinsReceived <= 0) {
+      return res.status(400).json({ error: 'Invalid trade calculation — please try again' });
+    }
 
     // Upsert holding
     const existing = await prisma.holding.findUnique({
