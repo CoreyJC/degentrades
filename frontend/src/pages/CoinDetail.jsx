@@ -284,8 +284,12 @@ export default function CoinDetail() {
         : '?';
       push(`✅ Bought ${recvAmt} ${coin.ticker}`, 'success');
       setSolAmt('');
-      // Update state directly from response — no separate fetch needed
-      if (data.holding) setHolding(data.holding);
+      // Update holding from response, fallback to portfolio fetch
+      if (data.holding) {
+        setHolding(data.holding);
+      } else {
+        try { const r = await axios.get('/api/portfolio'); setPortfolio(r.data); setHolding(r.data.holdings.find(h => h.coinId === id) ?? null); } catch {}
+      }
       if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
     } catch (e) {
       push(e.response?.data?.error ?? 'Buy failed', 'error');
@@ -301,8 +305,11 @@ export default function CoinDetail() {
       const { data } = await axios.post('/api/trade/sell', { coinId: id, coinAmount: amt });
       push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived?.toFixed(4) ?? '?'} SOL`, 'success');
       setCoinAmt('');
-      // Update state directly from response
-      setHolding(data.holding ?? null);
+      // Update holding from response, fallback to portfolio fetch
+      const newHolding = data.holding !== undefined ? data.holding : (
+        await axios.get('/api/portfolio').then(r => r.data.holdings.find(h => h.coinId === id) ?? null).catch(() => null)
+      );
+      setHolding(newHolding);
       if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
     } catch (e) {
       push(e.response?.data?.error ?? 'Sell failed', 'error');

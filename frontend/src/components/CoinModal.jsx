@@ -391,8 +391,12 @@ export default function CoinModal({ coinId, onClose }) {
       push(`✅ Bought ${coin.ticker} · MC ${fmtMC(mcAfterBuy)}`, 'success');
       setSolAmt('');
       addMarker('BUY', data.price, Math.floor(Date.now() / 1000));
-      // Update state directly from response — no separate fetch needed
-      if (data.holding) setHolding(data.holding);
+      // Update holding from response, fallback to portfolio fetch
+      if (data.holding) {
+        setHolding(data.holding);
+      } else {
+        try { const r = await axios.get('/api/portfolio'); setPortfolio(r.data); setHolding(r.data.holdings.find(h => h.coinId === coinId) ?? null); } catch {}
+      }
       if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
     } catch (e) {
       push(e.response?.data?.error ?? 'Buy failed', 'error');
@@ -420,8 +424,10 @@ export default function CoinModal({ coinId, onClose }) {
       push(`💰 Sold ${coin.ticker} · MC ${fmtMC(mcAfterSell)} · +${data.solReceived.toFixed(4)} SOL`, 'success');
       setCoinAmt('');
       addMarker('SELL', data.price, Math.floor(Date.now() / 1000));
-      // Update state directly from response
-      const newHolding = data.holding ?? null;
+      // Update holding from response, fallback to portfolio fetch
+      const newHolding = data.holding !== undefined ? data.holding : (
+        await axios.get('/api/portfolio').then(r => r.data.holdings.find(h => h.coinId === coinId) ?? null).catch(() => null)
+      );
       setHolding(newHolding);
       if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
 
