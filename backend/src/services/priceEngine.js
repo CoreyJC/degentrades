@@ -87,6 +87,9 @@ function _updatePhase(s) {
 
   if (phase === 'pump') {
     const isLegend = s.ceiling >= 10_000_000;
+    // Protect from instant distribution for 10 ticks after a user buy
+    // (large buy spikes price -> instant new ATH -> 1-tick natural correction -> athRatio < threshold -> distribution)
+    if (s.lastUserBuyTick != null && tickCount - s.lastUserBuyTick < 10) return;
     // Any pumping coin can enter consolidation - back-and-forth fighting
     // Runners: frequent + starts low MC | Pumpers: moderate | Bleeders: rare + only mid-range
     const consolidationChance =
@@ -496,6 +499,7 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
       if (s.fate !== 'bleeder') s.phase = 'pump';
     }
     if (s.price > s.ath) s.ath = s.price;
+    s.lastUserBuyTick = tickCount; // track for distribution protection window
   } else {
     s.price     = Math.max(s.price * (1 - impactPct), 1e-14);
     s.momentum  = Math.max(s.momentum - impactPct * 1.5, -1.0);
