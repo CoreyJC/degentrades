@@ -565,11 +565,8 @@ async function _rugCoin(coinId, finalPrice) {
       });
     }
 
-    // Now clean up - leave coin record as isActive:false so RUG txn FK stays valid
-    await prisma.$transaction([
-      prisma.transaction.deleteMany({ where: { coinId, type: { in: ['BUY', 'SELL'] } } }),
-      prisma.holding.deleteMany({ where: { coinId } }),
-    ]);
+    // Clean up holdings only — preserve all user transactions (BUY/SELL/RUG) for closed positions history
+    await prisma.holding.deleteMany({ where: { coinId } });
   } catch (err) {
     console.error(`Error rugging coin ${coinId}:`, err.message);
     removeCoin(coinId);
