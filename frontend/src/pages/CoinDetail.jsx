@@ -284,11 +284,9 @@ export default function CoinDetail() {
         : '?';
       push(`✅ Bought ${recvAmt} ${coin.ticker}`, 'success');
       setSolAmt('');
-      try {
-        const portRes = await axios.get('/api/portfolio');
-        setPortfolio(portRes.data);
-        setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
-      } catch { /* buy went through */ }
+      // Update state directly from response — no separate fetch needed
+      if (data.holding) setHolding(data.holding);
+      if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
     } catch (e) {
       push(e.response?.data?.error ?? 'Buy failed', 'error');
     } finally { setBusy(false); }
@@ -303,11 +301,9 @@ export default function CoinDetail() {
       const { data } = await axios.post('/api/trade/sell', { coinId: id, coinAmount: amt });
       push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived?.toFixed(4) ?? '?'} SOL`, 'success');
       setCoinAmt('');
-      try {
-        const portRes = await axios.get('/api/portfolio');
-        setPortfolio(portRes.data);
-        setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
-      } catch { /* sell went through */ }
+      // Update state directly from response
+      setHolding(data.holding ?? null);
+      if (data.newSolBalance != null) setPortfolio(prev => prev ? { ...prev, solBalance: data.newSolBalance } : prev);
     } catch (e) {
       push(e.response?.data?.error ?? 'Sell failed', 'error');
     } finally { setBusy(false); }

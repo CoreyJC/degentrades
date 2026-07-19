@@ -93,6 +93,7 @@ router.post('/buy', authenticate, async (req, res) => {
       gasFee:       GAS_FEE,
       totalCost,
       newSolBalance: portfolio.solBalance - totalCost,
+      holding: { coinId, amount: newAmount, avgBuyPrice: newAvgBuy },
     });
   } catch (err) {
     console.error(err);
@@ -179,6 +180,8 @@ router.post('/sell', authenticate, async (req, res) => {
       protocolFee,
       gasFee:       GAS_FEE,
       solReceived,
+      newSolBalance: portfolio.solBalance + solReceived,
+      holding: newAmount > 0.000001 ? { coinId, amount: newAmount, avgBuyPrice: holding.avgBuyPrice } : null,
     });
   } catch (err) {
     console.error(err);
