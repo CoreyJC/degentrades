@@ -284,9 +284,14 @@ export default function CoinDetail() {
         : '?';
       push(`✅ Bought ${recvAmt} ${coin.ticker}`, 'success');
       setSolAmt('');
-      const portRes = await axios.get('/api/portfolio');
-      setPortfolio(portRes.data);
-      setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
+      // Refresh portfolio separately — don't let a fetch hiccup mask a successful buy
+      try {
+        const portRes = await axios.get('/api/portfolio');
+        setPortfolio(portRes.data);
+        setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
+      } catch {
+        // Buy went through — portfolio will refresh on next load
+      }
     } catch (e) {
       push(e.response?.data?.error ?? 'Buy failed', 'error');
     } finally { setBusy(false); }
@@ -299,11 +304,15 @@ export default function CoinDetail() {
     setBusy(true);
     try {
       const { data } = await axios.post('/api/trade/sell', { coinId: id, coinAmount: amt });
-      push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived.toFixed(4)} SOL`, 'success');
+      push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived?.toFixed(4) ?? '?'} SOL`, 'success');
       setCoinAmt('');
-      const portRes = await axios.get('/api/portfolio');
-      setPortfolio(portRes.data);
-      setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
+      try {
+        const portRes = await axios.get('/api/portfolio');
+        setPortfolio(portRes.data);
+        setHolding(portRes.data.holdings.find((h) => h.coinId === id) ?? null);
+      } catch {
+        // Sell went through — portfolio will refresh on next load
+      }
     } catch (e) {
       push(e.response?.data?.error ?? 'Sell failed', 'error');
     } finally { setBusy(false); }

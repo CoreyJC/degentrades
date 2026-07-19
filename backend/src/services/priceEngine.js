@@ -574,8 +574,12 @@ async function _rugCoin(coinId, finalPrice) {
 
 // ── Tick ───────────────────────────────────────────────────────────────────────
 
+let tickCount = 0;
+const DB_WRITE_EVERY = 5; // write prices to DB every 5 ticks (5s) — reduces DB pressure
+
 async function tick() {
   if (!initialized) return;
+  tickCount++;
 
   const updates = {};
   const rugged  = [];
@@ -648,8 +652,11 @@ async function tick() {
 
   if (io && Object.keys(updates).length) io.emit('price_update', updates);
 
-  for (const coinId of Object.keys(updates)) {
-    prisma.coin.update({ where: { id: coinId }, data: { currentPrice: updates[coinId].price } }).catch(() => {});
+  // Write prices to DB periodically (not every tick) to reduce connection pool pressure
+  if (tickCount % DB_WRITE_EVERY === 0) {
+    for (const coinId of Object.keys(updates)) {
+      prisma.coin.update({ where: { id: coinId }, data: { currentPrice: updates[coinId].price } }).catch(() => {});
+    }
   }
 
   for (const { coinId, finalPrice } of rugged) {
