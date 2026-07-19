@@ -254,7 +254,6 @@ export default function CoinDetail() {
 
     function onCoinDeleted({ coinId, name, ticker }) {
       if (coinId !== id) return;
-      push(`💀 ${name} (${ticker}) was RUGGED — you've been sent back to market`, 'rug', 8000);
       setTimeout(() => navigate('/'), 2000);
     }
 

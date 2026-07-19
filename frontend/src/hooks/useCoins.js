@@ -65,8 +65,7 @@ export function useCoins(socket, pushToast) {
     function onCoinDeleted({ coinId, name, ticker, finalPrice }) {
       setCoins((prev) => prev.filter((c) => c.id !== coinId));
       delete seedPrices.current[coinId];
-      const priceStr = finalPrice != null ? ` @ $${finalPrice.toExponential(2)}` : '';
-      pushToast?.(`💀 RUGGED: ${name} (${ticker})${priceStr}`, 'rug', 6000);
+
     }
 
     function onCoinMigrated({ coinId, name, ticker, marketCap }) {

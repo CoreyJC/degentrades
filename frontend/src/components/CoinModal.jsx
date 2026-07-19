@@ -365,7 +365,6 @@ export default function CoinModal({ coinId, onClose }) {
 
     function onCoinDeleted({ coinId: deletedId, name, ticker }) {
       if (deletedId !== coinId) return;
-      push(`💀 ${name} (${ticker}) was RUGGED`, 'rug', 8000);
       setRugged(true);
     }
 
