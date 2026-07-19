@@ -253,7 +253,7 @@ function _nextPrice(coinId, s) {
   if (phase === 'pump') {
     // Bundled coins rug 3-4x more often in pump phase - dev is waiting to dump
     const bundledMult = s.isBundled ? 3.5 : 1.0;
-    const rugBase = (fate === 'runner' ? 0.002 : fate === 'pumper' ? 0.005 : 0.010) * bundledMult;
+    const rugBase = (fate === 'runner' ? 0.001 : fate === 'pumper' ? 0.0025 : 0.005) * bundledMult;
 
     // Rug
     t += rugBase;
@@ -303,7 +303,7 @@ function _nextPrice(coinId, s) {
 
   // ── DISTRIBUTION - topping out, selling pressure ──────────────────────────
   if (phase === 'distribution') {
-    const rugBase = fate === 'runner' ? 0.008 : fate === 'pumper' ? 0.015 : 0.025;
+    const rugBase = fate === 'runner' ? 0.004 : fate === 'pumper' ? 0.0075 : 0.0125;
 
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
@@ -339,7 +339,7 @@ function _nextPrice(coinId, s) {
   // ── BLEED - slow grind down, occasional dead cat bounce ──────────────────
   if (phase === 'bleed') {
     // Reduced rug rate - bleeders deserve a slow death, not instant annihilation
-    const rugBase = 0.008 + (ageMin > 30 ? 0.006 : 0);
+    const rugBase = 0.004 + (ageMin > 60 ? 0.003 : 0);
 
     t += rugBase;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
@@ -370,7 +370,7 @@ function _nextPrice(coinId, s) {
 
   // ── DYING - death spiral, NO pumps, only down ─────────────────────────────
   if (phase === 'dying') {
-    const rugChance = Math.min(0.02 + ageMin * 0.0008, 0.12); // slow burn - coins can linger in dying for a while
+    const rugChance = Math.min(0.01 + ageMin * 0.0004, 0.06); // slow burn - coins can linger in dying for a while
 
     t += rugChance;
     if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.85, 0.99)), 1e-14); }
