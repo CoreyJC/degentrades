@@ -535,8 +535,8 @@ async function _rugCoin(coinId, finalPrice) {
     const s = state[coinId];
     console.log(`💀 RUG: ${coin.name} (${coin.ticker}) [${s?.fate ?? '?'}/${s?.phase ?? '?'}] $${finalPrice.toExponential(2)}`);
 
-    // Find all holders so we can log a RUG transaction for each
-    const holdings = await prisma.holding.findMany({ where: { coinId } });
+    // Find all holders so we can log a RUG transaction for each (only real holders with amount > 0)
+    const holdings = await prisma.holding.findMany({ where: { coinId, amount: { gt: 0 } } });
 
     await prisma.coin.update({ where: { id: coinId }, data: { isActive: false } });
     if (io) io.emit('coin_deleted', { coinId, name: coin.name, ticker: coin.ticker, finalPrice });
