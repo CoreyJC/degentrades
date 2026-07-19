@@ -380,9 +380,9 @@ export default function CoinModal({ coinId, onClose }) {
     return true;
   }
 
-  async function buy() {
+  async function executeBuy(solAmount) {
     if (!requireAuth()) return;
-    const sol = parseFloat(solAmt);
+    const sol = parseFloat(solAmount);
     if (!sol || sol <= 0) return push('Enter a valid SOL amount', 'error');
     setBusy(true);
     try {
@@ -391,13 +391,17 @@ export default function CoinModal({ coinId, onClose }) {
       push(`✅ Bought ${coin.ticker} · MC ${fmtMC(mcAfterBuy)}`, 'success');
       setSolAmt('');
       addMarker('BUY', data.price, Math.floor(Date.now() / 1000));
-      const portRes = await axios.get('/api/portfolio');
-      setPortfolio(portRes.data);
-      setHolding(portRes.data.holdings.find((h) => h.coinId === coinId) ?? null);
+      try {
+        const portRes = await axios.get('/api/portfolio');
+        setPortfolio(portRes.data);
+        setHolding(portRes.data.holdings.find((h) => h.coinId === coinId) ?? null);
+      } catch { /* buy went through */ }
     } catch (e) {
       push(e.response?.data?.error ?? 'Buy failed', 'error');
     } finally { setBusy(false); }
   }
+
+  const buy = () => executeBuy(solAmt);
 
   async function sell(sellAll = false, overrideAmount = null) {
     if (!requireAuth()) return;
@@ -562,13 +566,12 @@ export default function CoinModal({ coinId, onClose }) {
                           ) : (
                             <button
                               key={idx}
-                              onClick={() => setSolAmt(String(amt))}
-                              onDoubleClick={() => { setEditingChipIdx(idx); setEditingValue(String(amt)); }}
-                              title="Double-click to edit"
-                              className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
-                                ${solAmt === String(amt)
-                                  ? 'bg-green-600 border-green-600 text-white'
-                                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
+                              onClick={() => executeBuy(amt)}
+                              onDoubleClick={(e) => { e.stopPropagation(); setEditingChipIdx(idx); setEditingValue(String(amt)); }}
+                              title="Click to buy instantly • Double-click to edit"
+                              disabled={busy}
+                              className="text-xs px-2.5 py-1.5 rounded-lg border transition-all
+                                bg-gray-800 border-gray-700 text-gray-400 hover:bg-green-700 hover:border-green-600 hover:text-white disabled:opacity-40"
                             >
                               {amt} SOL
                             </button>
@@ -576,17 +579,17 @@ export default function CoinModal({ coinId, onClose }) {
                         )}
                         {user && portfolio && (
                           <button
-                            onClick={() => setSolAmt(portfolio.solBalance.toFixed(4))}
-                            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all
-                              ${solAmt === portfolio.solBalance.toFixed(4)
-                                ? 'bg-green-600 border-green-600 text-white'
-                                : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-green-700 hover:text-green-400'}`}
+                            onClick={() => executeBuy(portfolio.solBalance)}
+                            disabled={busy}
+                            title="Buy with full balance"
+                            className="text-xs px-2.5 py-1.5 rounded-lg border transition-all
+                              bg-gray-800 border-gray-700 text-gray-400 hover:bg-green-700 hover:border-green-600 hover:text-white disabled:opacity-40"
                           >
                             MAX
                           </button>
                         )}
                       </div>
-                      <div className="text-xs text-gray-700 mt-1">✏️ double-click to edit</div>
+                      <div className="text-xs text-gray-700 mt-1">⚡ click to buy instantly • ✏️ double-click to edit amount</div>
                     </div>
 
                     {/* % of balance chips */}
@@ -597,9 +600,10 @@ export default function CoinModal({ coinId, onClose }) {
                           {[10, 25, 50, 75, 100].map((pct) => (
                             <button
                               key={pct}
-                              onClick={() => setSolAmt(((portfolio.solBalance * pct) / 100).toFixed(4))}
+                              onClick={() => executeBuy((portfolio.solBalance * pct) / 100)}
+                              disabled={busy}
                               className="flex-1 text-xs py-1.5 rounded-lg border border-gray-700 bg-gray-800
-                                text-gray-400 hover:border-green-700 hover:text-green-400 transition-all"
+                                text-gray-400 hover:bg-green-700 hover:border-green-600 hover:text-white transition-all disabled:opacity-40"
                             >
                               {pct}%
                             </button>
