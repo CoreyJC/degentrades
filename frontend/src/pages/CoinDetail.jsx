@@ -11,6 +11,24 @@ function calcSMA(candles, period = 20) {
     return { time: c.time, value: avg };
   }).filter(Boolean);
 }
+
+function aggregateCandles(candles, seconds) {
+  if (seconds === 1) return candles;
+  const map = new Map();
+  for (const c of candles) {
+    const t = Math.floor(c.time / seconds) * seconds;
+    if (!map.has(t)) {
+      map.set(t, { time: t, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 });
+    } else {
+      const b = map.get(t);
+      b.high   = Math.max(b.high, c.high);
+      b.low    = Math.min(b.low,  c.low);
+      b.close  = c.close;
+      b.volume = (b.volume || 0) + (c.volume || 0);
+    }
+  }
+  return [...map.values()];
+}
 import axios from 'axios';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -101,6 +119,8 @@ export default function CoinDetail() {
   const [holding,    setHolding]    = useState(null);
   const [busy,       setBusy]       = useState(false);
   const [showGate,   setShowGate]   = useState(false);
+  const [timeframe,  setTimeframe]  = useState(1);
+  const timeframeRef = useRef(1);
 
   // ── Load coin (+ portfolio if logged in) ──────────────────────────────────
   useEffect(() => {
@@ -218,6 +238,17 @@ export default function CoinDetail() {
     };
   }, [loading, id]);
 
+  // Re-render chart when timeframe changes
+  useEffect(() => {
+    timeframeRef.current = timeframe;
+    if (!seriesRef.current || candleCache.current.length === 0) return;
+    const agg = aggregateCandles(candleCache.current, timeframe);
+    seriesRef.current.setData(agg);
+    volumeRef.current?.setData(agg.map((c) => ({ time: c.time, value: c.volume || 0, color: c.close >= c.open ? '#00ff8855' : '#ff3b3b55' })));
+    smaRef.current?.setData(calcSMA(agg));
+    chartRef.current?.timeScale().fitContent();
+  }, [timeframe]);
+
   // ── Socket events ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
@@ -235,19 +266,31 @@ export default function CoinDetail() {
           low:   u.candle.low   * TOTAL_SUPPLY,
           close: u.candle.close * TOTAL_SUPPLY,
         };
-        seriesRef.current.update(mcCandle);
-        volumeRef.current?.update({
-          time:  mcCandle.time,
-          value: u.candle.volume,
-          color: mcCandle.close >= mcCandle.open ? '#00ff8855' : '#ff3b3b55',
-        });
         const cache = candleCache.current;
         const last  = cache[cache.length - 1];
         if (last && last.time === mcCandle.time) cache[cache.length - 1] = mcCandle;
         else { cache.push(mcCandle); if (cache.length > 500) cache.shift(); }
-        if (smaRef.current && cache.length >= 20) {
-          const avg = cache.slice(-20).reduce((s, x) => s + x.close, 0) / 20;
-          smaRef.current.update({ time: mcCandle.time, value: avg });
+        const tf = timeframeRef.current;
+        if (tf === 1) {
+          seriesRef.current.update(mcCandle);
+          volumeRef.current?.update({ time: mcCandle.time, value: u.candle.volume, color: mcCandle.close >= mcCandle.open ? '#00ff8855' : '#ff3b3b55' });
+          if (smaRef.current && cache.length >= 20) {
+            const avg = cache.slice(-20).reduce((s, x) => s + x.close, 0) / 20;
+            smaRef.current.update({ time: mcCandle.time, value: avg });
+          }
+        } else {
+          const bucketTime = Math.floor(mcCandle.time / tf) * tf;
+          const bc = cache.filter((c) => Math.floor(c.time / tf) * tf === bucketTime);
+          const bucket = { time: bucketTime, open: bc[0].open, high: Math.max(...bc.map((c) => c.high)), low: Math.min(...bc.map((c) => c.low)), close: bc[bc.length - 1].close, volume: bc.reduce((s, c) => s + (c.volume || 0), 0) };
+          seriesRef.current.update(bucket);
+          volumeRef.current?.update({ time: bucket.time, value: bucket.volume, color: bucket.close >= bucket.open ? '#00ff8855' : '#ff3b3b55' });
+          if (smaRef.current) {
+            const agg = aggregateCandles(cache, tf);
+            if (agg.length >= 20) {
+              const avg = agg.slice(-20).reduce((s, c) => s + c.close, 0) / 20;
+              smaRef.current.update({ time: agg[agg.length - 1].time, value: avg });
+            }
+          }
         }
       }
     }
@@ -345,6 +388,19 @@ export default function CoinDetail() {
       </div>
 
       {/* Chart */}
+      <div className="flex gap-1 mb-1">
+        {[1, 15].map((tf) => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            className={`px-2 py-0.5 text-xs rounded font-mono transition-colors ${
+              timeframe === tf ? 'bg-green-500 text-black font-bold' : 'bg-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            {tf}s
+          </button>
+        ))}
+      </div>
       <div ref={chartElRef} className="rounded-xl overflow-hidden border border-gray-800 mb-6" />
 
       {/* Trade + holding info */}
