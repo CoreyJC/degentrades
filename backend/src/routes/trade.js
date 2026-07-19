@@ -36,7 +36,12 @@ router.post('/buy', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Insufficient SOL balance (include fees)' });
     }
 
-    const coinsReceived = solAmount / currentPrice;
+    // Apply buy impact BEFORE calculating coins received — you fill at the post-impact price.
+    // This mirrors real AMM/DEX slippage and closes the instant buy→sell exploit.
+    priceEngine.applyTradeImpact(coinId, solAmount, true);
+    const executionPrice = priceEngine.getCurrentPrice(coinId) || currentPrice;
+
+    const coinsReceived = solAmount / executionPrice;
 
     if (!isFinite(coinsReceived) || coinsReceived <= 0) {
       return res.status(400).json({ error: 'Invalid trade calculation — please try again' });
@@ -54,7 +59,7 @@ router.post('/buy', authenticate, async (req, res) => {
       newAvgBuy = totalCost / newAmount;
     } else {
       newAmount = coinsReceived;
-      newAvgBuy = currentPrice;
+      newAvgBuy = executionPrice;
     }
 
     await prisma.$transaction([
@@ -73,20 +78,18 @@ router.post('/buy', authenticate, async (req, res) => {
           coinId,
           type: 'BUY',
           amount: coinsReceived,
-          price: currentPrice,
+          price: executionPrice,
           solSpent: solAmount,
         },
       }),
     ]);
 
-    // Apply buy pressure to the market — your SOL going in pumps the price
-    priceEngine.applyTradeImpact(coinId, solAmount, true);
     const newPrice = priceEngine.getCurrentPrice(coinId);
 
     res.json({
       success: true,
       coinsReceived,
-      price: currentPrice,
+      price: executionPrice,
       newPrice,
       solSpent:     solAmount,
       protocolFee,
