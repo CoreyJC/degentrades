@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, createSeriesMarkers } from 'lightweight-charts';
 import axios from 'axios';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -90,7 +90,8 @@ export default function CoinModal({ coinId, onClose }) {
   const volumeRef   = useRef(null);
   const smaRef      = useRef(null);
   const candleCache = useRef([]);
-  const markersRef  = useRef([]);   // B/S trade markers
+  const markersRef      = useRef([]);   // B/S trade markers
+  const markersPluginRef = useRef(null); // v5 markers plugin
   const avgLineRef  = useRef(null); // avg entry price line
 
   const [coin,      setCoin]      = useState(null);
@@ -126,10 +127,10 @@ export default function CoinModal({ coinId, onClose }) {
   // ── Chart helpers ─────────────────────────────────────────────────────────────────────────
 
   function setMarkers(markers) {
-    if (!seriesRef.current) return;
+    if (!markersPluginRef.current) return;
     // lightweight-charts requires markers sorted by time
     const sorted = [...markers].sort((a, b) => a.time - b.time);
-    seriesRef.current.setMarkers(sorted);
+    markersPluginRef.current.setMarkers(sorted);
   }
 
   function addMarker(type, price, time) {
@@ -235,6 +236,7 @@ export default function CoinModal({ coinId, onClose }) {
           wickDownColor:   '#ff3b3b',
         });
         seriesRef.current = series;
+        markersPluginRef.current = createSeriesMarkers(series, []);
 
         // Volume histogram
         const volumeSeries = chart.addSeries(HistogramSeries, {
