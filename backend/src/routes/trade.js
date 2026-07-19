@@ -113,9 +113,10 @@ router.post('/sell', authenticate, async (req, res) => {
     const coin = await prisma.coin.findUnique({ where: { id: coinId } });
     if (!coin) return res.status(404).json({ error: 'Coin not found' });
 
-    const holding = await prisma.holding.findUnique({
-      where: { userId_coinId: { userId: req.userId, coinId } },
-    });
+    const [holding, portfolio] = await Promise.all([
+      prisma.holding.findUnique({ where: { userId_coinId: { userId: req.userId, coinId } } }),
+      prisma.portfolio.findUnique({ where: { userId: req.userId } }),
+    ]);
 
     if (!holding || holding.amount <= 0) {
       return res.status(400).json({ error: 'Insufficient holdings' });
