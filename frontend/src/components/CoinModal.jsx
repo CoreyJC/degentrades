@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, createSeriesMarkers } from 'lightweight-charts';
 import axios from 'axios';
+import { playBuy, playSell } from '../utils/sounds';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useToast }  from '../context/ToastContext';
@@ -429,6 +430,7 @@ export default function CoinModal({ coinId, onClose }) {
     try {
       const { data } = await axios.post('/api/trade/buy', { coinId, solAmount: sol });
       const mcAfterBuy = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
+      playBuy();
       push(`✅ Bought ${coin.ticker} · MC ${fmtMC(mcAfterBuy)}`, 'success');
       setSolAmt('');
       addMarker('BUY', data.price, Math.floor(Date.now() / 1000));
@@ -462,6 +464,7 @@ export default function CoinModal({ coinId, onClose }) {
         : { coinId, coinAmount: amt };
       const { data } = await axios.post('/api/trade/sell', payload);
       const mcAfterSell = (data.newPrice ?? data.price) * TOTAL_SUPPLY;
+      playSell();
       push(`💰 Sold ${coin.ticker} · MC ${fmtMC(mcAfterSell)} · +${data.solReceived.toFixed(4)} SOL`, 'success');
       setCoinAmt('');
       addMarker('SELL', data.price, Math.floor(Date.now() / 1000));

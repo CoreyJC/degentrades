@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts';
+import { playBuy, playSell } from '../utils/sounds';
 
 const TOTAL_SUPPLY = 1_000_000_000;
 
@@ -324,6 +325,7 @@ export default function CoinDetail() {
       const recvAmt = data.coinsReceived != null && isFinite(data.coinsReceived)
         ? data.coinsReceived.toExponential(3)
         : '?';
+      playBuy();
       push(`✅ Bought ${recvAmt} ${coin.ticker}`, 'success');
       setSolAmt('');
       // Update holding from response, fallback to portfolio fetch
@@ -345,6 +347,7 @@ export default function CoinDetail() {
     setBusy(true);
     try {
       const { data } = await axios.post('/api/trade/sell', { coinId: id, coinAmount: amt });
+      playSell();
       push(`💰 Sold ${amt.toExponential(3)} ${coin.ticker} for ${data.solReceived?.toFixed(4) ?? '?'} SOL`, 'success');
       setCoinAmt('');
       // Update holding from response, fallback to portfolio fetch
