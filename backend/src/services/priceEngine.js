@@ -180,6 +180,51 @@ function _nextPrice(coinId, s) {
   const { price: p, phase, fate, momentum } = s;
   const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
 
+  // ── MIGRATED S/R RETEST - overrides normal phase logic near key levels ─────────────
+  if (s.migrated && s.resistanceLevel && s.supportLevel && (phase === 'distribution' || phase === 'bleed')) {
+    const nearResistance = p >= s.resistanceLevel * 0.92; // within 8% below resistance
+    const nearSupport    = p <= s.supportLevel   * 1.10; // within 10% above support
+
+    if (nearResistance) {
+      s.retestCount = (s.retestCount ?? 0) + 1;
+      // Each retest weakens the bounce - more likely to reject after multiple tests
+      const rejectChance = Math.min(0.80, 0.50 + s.retestCount * 0.08);
+      if (Math.random() < rejectChance) {
+        // Rejection: pull back from resistance
+        s.momentum = Math.max(s.momentum - 0.3, -1.0);
+        return Math.max(p * (1 - _rand(0.04, 0.14)), 1e-14);
+      } else {
+        // Breakout attempt (rare, weakens each time)
+        s.resistanceLevel = p * (1 + _rand(0.08, 0.20)); // resistance moves up
+        s.momentum = Math.min(s.momentum + 0.3, 1.0);
+        return p * (1 + _rand(0.03, 0.10));
+      }
+    }
+
+    if (nearSupport) {
+      // Support bounce chance decreases with retests - eventually support breaks
+      const bounceChance = Math.max(0.15, 0.65 - (s.retestCount ?? 0) * 0.10);
+      if (Math.random() < bounceChance) {
+        // Bounce off support - rally back toward resistance
+        s.momentum = Math.min(s.momentum + 0.35, 1.0);
+        return p * (1 + _rand(0.06, 0.22));
+      } else {
+        // Support breaks - drop support level lower, now becomes resistance
+        s.resistanceLevel = s.supportLevel;
+        s.supportLevel    = p * (1 - _rand(0.20, 0.35));
+        s.retestCount     = 0; // reset for new range
+        s.momentum        = Math.max(s.momentum - 0.4, -1.0);
+        return Math.max(p * (1 - _rand(0.08, 0.20)), 1e-14);
+      }
+    }
+
+    // Between levels: choppy movement biased by momentum and phase
+    const downBias = phase === 'bleed' ? 0.62 : 0.52;
+    const dir = Math.random() < downBias ? -1 : 1;
+    const pct = _rand(0.008, 0.040);
+    return Math.max(p * (1 + dir * pct), 1e-14);
+  }
+
   // ── NEWBORN - sniper/bot front-run on launch (first 6 ticks ≈ 12 seconds) ─
   if (s.newbornTicks > 0) {
     const tick = s.newbornTicks; // 6 down to 1
@@ -682,6 +727,10 @@ async function tick() {
     // Migration check
     if (!s.migrated && marketCap >= MIGRATION_THRESHOLD) {
       s.migrated = true;
+      // Seed S/R levels from migration price - coin will retest these areas
+      s.resistanceLevel = next;        // migration price = first resistance
+      s.supportLevel    = next * 0.65; // ~35% below = first support zone
+      s.retestCount     = 0;           // tracks how many times each level has been tested
       prisma.coin.update({ where: { id: coinId }, data: { migrated: true, migratedAt: new Date() } }).catch(() => {});
       if (io) io.emit('coin_migrated', { coinId, name: s.name, ticker: s.ticker, marketCap });
     }
