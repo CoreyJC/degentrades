@@ -21,6 +21,7 @@ const TICK_MS             = 1000;
 const RUG_THRESHOLD       = 0.0000001;
 const TOTAL_SUPPLY        = 1_000_000_000;
 const MIGRATION_THRESHOLD = 69_000;
+const MIN_RUG_AGE_MIN     = 15; // keep coins alive long enough for a fuller market
 
 // ── In-memory state ────────────────────────────────────────────────────────────
 const state = {};
@@ -607,7 +608,16 @@ async function tick() {
     _updatePhase(s);
 
     const prev = s.price;
-    const next = _capUpsideVelocity(s, _nextPrice(coinId, s));
+    const coinAgeMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
+    let next = _capUpsideVelocity(s, _nextPrice(coinId, s));
+
+    // Early protection: don't let newborn coins disappear instantly.
+    // If a rug branch fires before 15m, convert it into a hard dump instead of removal.
+    if (coinAgeMin < MIN_RUG_AGE_MIN && next <= RUG_THRESHOLD) {
+      next = Math.max(prev * _rand(0.35, 0.65), RUG_THRESHOLD * 10);
+      s.momentum = Math.max(s.momentum, -0.6);
+    }
+
     s.price    = next;
 
     // ── Candle ──

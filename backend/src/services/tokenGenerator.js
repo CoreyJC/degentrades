@@ -158,14 +158,17 @@ async function spawnCoin() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
-const INITIAL_POPULATION_TARGET = 80; // fill up fast on startup
+const ACTIVE_POPULATION_TARGET = 80; // maintain a full market, not just startup fill
+let bulkSpawning = false;
 
 async function _bulkSpawn() {
+  if (bulkSpawning) return;
+  bulkSpawning = true;
   try {
     const count = await prisma.coin.count({ where: { isActive: true } });
-    const toSpawn = Math.max(0, INITIAL_POPULATION_TARGET - count);
+    const toSpawn = Math.max(0, ACTIVE_POPULATION_TARGET - count);
     if (toSpawn === 0) return;
-    console.log(`🏭  Bulk spawn: ${toSpawn} coins to reach ${INITIAL_POPULATION_TARGET} (currently ${count})`);
+    console.log(`🏭  Bulk spawn: ${toSpawn} coins to reach ${ACTIVE_POPULATION_TARGET} (currently ${count})`);
     for (let i = 0; i < toSpawn; i++) {
       await spawnCoin();
       // small stagger so the price engine doesn't get slammed
@@ -174,6 +177,8 @@ async function _bulkSpawn() {
     console.log(`🏭  Bulk spawn complete — ${toSpawn} coins added`);
   } catch (err) {
     console.error('Bulk spawn error:', err.message);
+  } finally {
+    bulkSpawning = false;
   }
 }
 
@@ -183,10 +188,10 @@ let running  = false;
 function start() {
   if (running) return;
   running  = true;
-  // Populate immediately, then keep spawning every 10s
+  // Populate immediately, then keep refilling every 10s if active count falls.
   _bulkSpawn();
-  interval = setInterval(spawnCoin, SPAWN_INTERVAL_MS);
-  console.log(`🏭  Token generator started — 1 coin every ${SPAWN_INTERVAL_MS / 1000}s (target: ${INITIAL_POPULATION_TARGET} initial)`);
+  interval = setInterval(_bulkSpawn, SPAWN_INTERVAL_MS);
+  console.log(`🏭  Token generator started — maintaining ${ACTIVE_POPULATION_TARGET} active coins`);
 }
 
 function stop() {
