@@ -82,10 +82,18 @@ function _updatePhase(s) {
   const ageMin        = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
   const marketCap     = s.price * TOTAL_SUPPLY;
 
-  // Force distribution when coin hits its personal ceiling
-  if (marketCap >= s.ceiling && (phase === 'pump' || phase === 'early')) {
-    s.phase = 'distribution';
-    return;
+  // Probabilistic ceiling pressure - no hard wall, but dump chance ramps up as coin approaches ceiling.
+  // Starts building at 50% of ceiling, peaks at ~15% chance/tick when 20% past ceiling.
+  if ((phase === 'pump' || phase === 'early') && s.ceiling > 0) {
+    const ratio = marketCap / s.ceiling;
+    if (ratio > 0.5) {
+      // Sigmoid-style ramp: near 0% at 50% ceiling, ~15% at 120% ceiling
+      const pressure = Math.min(0.15, Math.pow(Math.max(0, ratio - 0.5), 1.8) * 0.7);
+      if (Math.random() < pressure) {
+        s.phase = 'distribution';
+        return;
+      }
+    }
   }
 
   if (phase === 'early') {
