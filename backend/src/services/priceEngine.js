@@ -30,13 +30,15 @@ let initialized = false;
 
 function _rand(min, max) { return min + Math.random() * (max - min); }
 
-// Cap upside velocity so legendary runs take time instead of one lucky minute.
-// 0.6%/sec means a $2K → $200M run needs ~32 minutes of nonstop green ticks.
+// Cap upside velocity only for legendary runners to prevent single-tick moons.
+// Normal coins pump freely; only coins with ceiling >= $10M get a soft cap after 5 min.
 function _capUpsideVelocity(s, nextPrice) {
   if (nextPrice <= s.price) return nextPrice;
+  // Only apply to legendary runners, and only after 5 min (newborn spike window)
+  if ((s.ceiling ?? 0) < 10_000_000) return nextPrice;
   const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
-  if (ageMin >= 30) return nextPrice;
-  const maxUpPct = 0.006;
+  if (ageMin < 5) return nextPrice;
+  const maxUpPct = 0.25; // 25% per tick max for legend runs - still fast but not instant
   return Math.min(nextPrice, s.price * (1 + maxUpPct));
 }
 
