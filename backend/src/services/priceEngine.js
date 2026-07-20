@@ -595,6 +595,24 @@ async function _rugCoin(coinId, finalPrice) {
 
 // ── Tick ───────────────────────────────────────────────────────────────────────
 
+// ── Volume helper ────────────────────────────────────────────────────────────
+// Organic volume: price-move component + large random base + phase multiplier + occasional spikes
+function _candleVolume(prev, next, s) {
+  const changePct = prev > 0 ? Math.abs((next - prev) / prev) : 0;
+  // Base: exponentially distributed random (log-normal feel, wide variance)
+  const base = Math.pow(Math.random(), 0.4) * 300 + Math.random() * 150;
+  // Price-move amplifier: big moves get big volume
+  const moveAmp = changePct * 8000 * (1 + Math.random() * 2);
+  // Phase multiplier
+  const phaseMult = s.phase === 'pump' ? (1.2 + Math.random() * 0.8)
+                  : s.phase === 'distribution' ? (1.0 + Math.random() * 1.0)
+                  : s.phase === 'dying' ? (0.3 + Math.random() * 0.4)
+                  : (0.6 + Math.random() * 0.6);
+  // Rare volume spike (~5% of candles)
+  const spike = Math.random() < 0.05 ? (3 + Math.random() * 7) : 1.0;
+  return (base + moveAmp) * phaseMult * spike;
+}
+
 let tickCount = 0;
 const DB_WRITE_EVERY = 5; // write prices to DB every 5 ticks (5s) — reduces DB pressure
 
@@ -626,7 +644,7 @@ async function tick() {
       lastCandle.high   = Math.max(lastCandle.high, next);
       lastCandle.low    = Math.min(lastCandle.low, next);
       lastCandle.close  = next;
-      lastCandle.volume += Math.abs((next - prev) / prev) * 4000 + Math.random() * 80;
+      lastCandle.volume += _candleVolume(prev, next, s);
     } else {
       candles.push({
         time:   nowSec,
@@ -634,7 +652,7 @@ async function tick() {
         high:   Math.max(prev, next),
         low:    Math.min(prev, next),
         close:  next,
-        volume: Math.abs((next - prev) / prev) * 4000 + Math.random() * 80,
+        volume: _candleVolume(prev, next, s),
       });
       if (candles.length > MAX_CANDLES) candles.shift();
     }
