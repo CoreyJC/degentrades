@@ -104,6 +104,7 @@ export default function CoinModal({ coinId, onClose }) {
   const { push }   = useToast();
 
   const chartElRef  = useRef(null);
+  const quickBuyClickTimer = useRef(null);
   const chartRef    = useRef(null);
   const seriesRef   = useRef(null);
   const volumeRef   = useRef(null);
@@ -136,6 +137,25 @@ export default function CoinModal({ coinId, onClose }) {
     }
     setEditingChipIdx(null);
     setEditingValue('');
+  }
+
+  function handleQuickBuyClick(amt) {
+    if (quickBuyClickTimer.current) clearTimeout(quickBuyClickTimer.current);
+    quickBuyClickTimer.current = setTimeout(() => {
+      quickBuyClickTimer.current = null;
+      executeBuy(amt);
+    }, 220);
+  }
+
+  function handleQuickBuyDoubleClick(e, idx, amt) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (quickBuyClickTimer.current) {
+      clearTimeout(quickBuyClickTimer.current);
+      quickBuyClickTimer.current = null;
+    }
+    setEditingChipIdx(idx);
+    setEditingValue(String(amt));
   }
   const [portfolio, setPortfolio] = useState(null);
   const [holding,   setHolding]   = useState(null);
@@ -628,8 +648,8 @@ export default function CoinModal({ coinId, onClose }) {
                           ) : (
                             <button
                               key={idx}
-                              onClick={() => executeBuy(amt)}
-                              onDoubleClick={(e) => { e.stopPropagation(); setEditingChipIdx(idx); setEditingValue(String(amt)); }}
+                              onClick={() => handleQuickBuyClick(amt)}
+                              onDoubleClick={(e) => handleQuickBuyDoubleClick(e, idx, amt)}
                               title="Click to buy instantly • Double-click to edit"
                               disabled={busy}
                               className="text-xs px-2.5 py-1.5 rounded-lg border transition-all
