@@ -209,7 +209,7 @@ function _nextPrice(coinId, s) {
 
     // Very rare rug (coin is established, whales protecting)
     t += 0.002;
-    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.60, 0.90)), 1e-14); }
+    if (roll < t) { s.momentum = -1.0; return 1e-14; }
 
     // Big bull candle - attempt to break out
     t += 0.11;
@@ -267,7 +267,7 @@ function _nextPrice(coinId, s) {
 
     // Rug
     t += rugBase;
-    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
+    if (roll < t) { s.momentum = -1.0; return 1e-14; }
 
     // Mega pump - runners get big ones, scaled by ceiling
     if (fate === 'runner') {
@@ -316,7 +316,7 @@ function _nextPrice(coinId, s) {
     const rugBase = fate === 'runner' ? 0.004 : fate === 'pumper' ? 0.0075 : 0.0125;
 
     t += rugBase;
-    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
+    if (roll < t) { s.momentum = -1.0; return 1e-14; }
 
     // Runners can still mini-pump
     if (fate === 'runner') {
@@ -348,11 +348,10 @@ function _nextPrice(coinId, s) {
 
   // ── BLEED - slow grind down, occasional dead cat bounce ──────────────────
   if (phase === 'bleed') {
-    // Reduced rug rate - bleeders deserve a slow death, not instant annihilation
     const rugBase = 0.004 + (ageMin > 60 ? 0.003 : 0);
 
     t += rugBase;
-    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.80, 0.99)), 1e-14); }
+    if (roll < t) { s.momentum = -1.0; return 1e-14; }
 
     // Tiny dead cat bounce (rare)
     t += 0.04;
@@ -380,10 +379,10 @@ function _nextPrice(coinId, s) {
 
   // ── DYING - death spiral, NO pumps, only down ─────────────────────────────
   if (phase === 'dying') {
-    const rugChance = Math.min(0.01 + ageMin * 0.0004, 0.06); // slow burn - coins can linger in dying for a while
+    const rugChance = Math.min(0.01 + ageMin * 0.0004, 0.06);
 
     t += rugChance;
-    if (roll < t) { s.momentum = -1.0; return Math.max(p * (1 - _rand(0.85, 0.99)), 1e-14); }
+    if (roll < t) { s.momentum = -1.0; return 1e-14; }
 
     // Small bounce (looks like hope, isn't)
     t += 0.03;
@@ -497,9 +496,8 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
   // Impact scales with trade size vs market cap - thin liquidity = big moves
   // 1 SOL into $1K MC = 15% bump | 5 SOL = 75% | 10 SOL = 150% (capped at 5x)
   const rawImpact = Math.abs(impactSol) / marketCap * 150;
-  // Buys can send tiny caps hard, but sells should not instantly force a rug.
-  // Cap sell impact at -85% so the sell records cleanly and the coin can die naturally on later ticks.
-  const impactPct = isBuy ? Math.min(rawImpact, 5.0) : Math.min(rawImpact, 0.85);
+  // Both buys and sells can move price hard — sells can rug instantly.
+  const impactPct = Math.min(rawImpact, 5.0);
 
   if (isBuy) {
     s.price     = _capUpsideVelocity(s, s.price * (1 + impactPct));
