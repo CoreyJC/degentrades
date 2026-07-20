@@ -1,56 +1,45 @@
 /**
- * Lightweight Web Audio API sound effects for DegenTrades.
- * No files — all synthesized. AudioContext is created lazily on first call.
+ * Sound effects for DegenTrades — fresh AudioContext per play to avoid suspend issues.
  */
 
-let ctx = null;
-
-function getCtx() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-  // Resume if suspended (browsers require user gesture first)
-  if (ctx.state === 'suspended') ctx.resume();
-  return ctx;
-}
-
-function playTone({ freq, freq2, duration = 0.35, volume = 0.25, type = 'sine', delay = 0 }) {
+function beep({ freq = 440, freq2, duration = 0.3, volume = 0.25, type = 'sine' } = {}) {
   try {
-    const c    = getCtx();
-    const osc  = c.createOscillator();
-    const gain = c.createGain();
+    const ac   = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ac.createOscillator();
+    const gain = ac.createGain();
+
     osc.connect(gain);
-    gain.connect(c.destination);
+    gain.connect(ac.destination);
 
     osc.type = type;
-    osc.frequency.setValueAtTime(freq, c.currentTime + delay);
-    if (freq2) osc.frequency.linearRampToValueAtTime(freq2, c.currentTime + delay + duration * 0.6);
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    if (freq2) osc.frequency.linearRampToValueAtTime(freq2, ac.currentTime + duration * 0.7);
 
-    gain.gain.setValueAtTime(0, c.currentTime + delay);
-    gain.gain.linearRampToValueAtTime(volume, c.currentTime + delay + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + duration);
+    gain.gain.setValueAtTime(volume, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
 
-    osc.start(c.currentTime + delay);
-    osc.stop(c.currentTime + delay + duration);
-  } catch (_) {}
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + duration);
+    osc.onended = () => ac.close();
+  } catch (e) {
+    console.warn('[sounds] error:', e);
+  }
 }
 
-/** Call this synchronously inside a click handler to unlock AudioContext before any async work */
-export function primeAudio() {
-  try { getCtx(); } catch (_) {}
-}
-
-/** 🟢 Buy — bright ascending double-ding */
+/** 🟢 Buy — bright ascending ding */
 export function playBuy() {
-  playTone({ freq: 523, freq2: 784, duration: 0.3, volume: 0.20, type: 'sine' });        // C5 → G5
-  playTone({ freq: 784, freq2: 1047, duration: 0.25, volume: 0.12, type: 'sine', delay: 0.18 }); // G5 → C6
+  beep({ freq: 523, freq2: 1047, duration: 0.28, volume: 0.22 }); // C5 → C6
 }
 
-/** 🔴 Sell — neutral descending tone */
+/** 🔴 Sell — softer descending tone */
 export function playSell() {
-  playTone({ freq: 659, freq2: 494, duration: 0.3, volume: 0.18, type: 'sine' });        // E5 → B4
-  playTone({ freq: 494, freq2: 392, duration: 0.25, volume: 0.10, type: 'sine', delay: 0.15 }); // B4 → G4
+  beep({ freq: 659, freq2: 392, duration: 0.28, volume: 0.18 }); // E5 → G4
 }
 
-/** 💀 Rug — low rumble */
+/** 💀 Rug — low rumble (optional) */
 export function playRug() {
-  playTone({ freq: 120, freq2: 60, duration: 0.6, volume: 0.22, type: 'sawtooth' });
+  beep({ freq: 110, freq2: 55, duration: 0.5, volume: 0.20, type: 'sawtooth' });
 }
+
+/** No-op — kept for compatibility */
+export function primeAudio() {}
