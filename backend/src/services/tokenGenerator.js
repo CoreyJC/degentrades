@@ -85,9 +85,14 @@ async function uniqueTicker(base) {
   }
 }
 
-// All tokens start at exactly $1K MC (price = 1000 / 1e9)
+// Starting MC distribution:
+// - 80% start exactly at $2K MC
+// - 20% start randomly between $2K and $10K MC
 function randomStartingPrice() {
-  return 0.000001;
+  const startingMc = Math.random() < 0.80
+    ? 2_000
+    : 2_000 + Math.random() * 8_000;
+  return startingMc / 1_000_000_000;
 }
 
 /**
