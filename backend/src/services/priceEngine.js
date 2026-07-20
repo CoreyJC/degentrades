@@ -487,7 +487,9 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
   // Impact scales with trade size vs market cap - thin liquidity = big moves
   // 1 SOL into $1K MC = 15% bump | 5 SOL = 75% | 10 SOL = 150% (capped at 5x)
   const rawImpact = Math.abs(impactSol) / marketCap * 150;
-  const impactPct = Math.min(rawImpact, 5.0); // max 5x price move per single trade
+  // Buys can send tiny caps hard, but sells should not instantly force a rug.
+  // Cap sell impact at -85% so the sell records cleanly and the coin can die naturally on later ticks.
+  const impactPct = isBuy ? Math.min(rawImpact, 5.0) : Math.min(rawImpact, 0.85);
 
   if (isBuy) {
     s.price     = s.price * (1 + impactPct);
