@@ -1,13 +1,6 @@
 /**
- * Sound effects for DegenTrades.
- *
- * Chrome loses the user-gesture context at the first `await`, so we can't
- * create a new AudioContext after an API call. Instead we keep ONE shared
- * context that is created (and therefore unlocked) synchronously on the
- * first user click, then reused for every subsequent sound.
- *
- * Call primeAudio() at the TOP of any click handler (before any await)
- * to ensure the context is running by the time playBuy/playSell fires.
+ * Pleasant lightweight sound effects for DegenTrades.
+ * Shared AudioContext is primed synchronously on click, then reused after async API calls.
  */
 
 let _ctx = null;
@@ -20,49 +13,62 @@ function ctx() {
   return _ctx;
 }
 
-function tone(ac, { freq, freq2, start, duration, volume = 0.2, type = 'sine' }) {
+function tone(ac, { freq, freq2, start, duration, volume = 0.08, type = 'sine' }) {
   const osc  = ac.createOscillator();
   const gain = ac.createGain();
-  osc.connect(gain);
+  const filter = ac.createBiquadFilter();
+
+  osc.connect(filter);
+  filter.connect(gain);
   gain.connect(ac.destination);
+
   osc.type = type;
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(4200, start);
+  filter.Q.setValueAtTime(0.6, start);
+
   osc.frequency.setValueAtTime(freq, start);
-  if (freq2) osc.frequency.linearRampToValueAtTime(freq2, start + duration * 0.6);
-  gain.gain.setValueAtTime(volume, start);
+  if (freq2) osc.frequency.exponentialRampToValueAtTime(freq2, start + duration * 0.45);
+
+  // Soft bell envelope: fast gentle attack, smooth natural decay.
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(volume, start + 0.018);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
   osc.start(start);
-  osc.stop(start + duration);
+  osc.stop(start + duration + 0.02);
 }
 
-/** Must be called synchronously inside a click handler (before any await). */
+function bell({ base = 880, start = 0, volume = 0.08 } = {}) {
+  const ac = ctx();
+  const t = ac.currentTime + start;
+
+  // Soft major-chord bell: root + fifth + octave shimmer.
+  tone(ac, { freq: base,        freq2: base * 1.01, start: t,        duration: 0.42, volume,        type: 'sine' });
+  tone(ac, { freq: base * 1.5,  freq2: base * 1.5,  start: t + 0.015, duration: 0.34, volume: volume * 0.38, type: 'triangle' });
+  tone(ac, { freq: base * 2.0,  freq2: base * 2.0,  start: t + 0.04,  duration: 0.28, volume: volume * 0.22, type: 'sine' });
+}
+
+/** Must be called synchronously inside a click handler before any await. */
 export function primeAudio() {
   try { ctx(); } catch (_) {}
 }
 
-/** 🟢 Buy — ascending double-ding */
+/** 🟢 Buy — pleasant bright ding */
 export function playBuy() {
-  try {
-    const ac = ctx();
-    const t  = ac.currentTime;
-    tone(ac, { freq: 523, freq2: 1047, start: t,        duration: 0.25, volume: 0.22 });
-    tone(ac, { freq: 784, freq2: 1047, start: t + 0.15, duration: 0.20, volume: 0.13 });
-  } catch (e) { console.warn('[sound] buy:', e); }
+  try { bell({ base: 880, volume: 0.075 }); } catch (e) { console.warn('[sound] buy:', e); }
 }
 
-/** 🔴 Sell — descending tone */
+/** 🔴 Sell — same family, slightly lower/warmer ding */
 export function playSell() {
-  try {
-    const ac = ctx();
-    const t  = ac.currentTime;
-    tone(ac, { freq: 659, freq2: 440, start: t,        duration: 0.25, volume: 0.18 });
-    tone(ac, { freq: 440, freq2: 330, start: t + 0.15, duration: 0.20, volume: 0.10 });
-  } catch (e) { console.warn('[sound] sell:', e); }
+  try { bell({ base: 740, volume: 0.07 }); } catch (e) { console.warn('[sound] sell:', e); }
 }
 
 /** 💀 Rug (optional) */
 export function playRug() {
   try {
     const ac = ctx();
-    tone(ac, { freq: 110, freq2: 55, start: ac.currentTime, duration: 0.5, volume: 0.20, type: 'sawtooth' });
+    const t = ac.currentTime;
+    tone(ac, { freq: 110, freq2: 55, start: t, duration: 0.5, volume: 0.12, type: 'sawtooth' });
   } catch (e) {}
 }
