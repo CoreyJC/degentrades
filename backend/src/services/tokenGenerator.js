@@ -159,6 +159,7 @@ async function spawnCoin() {
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 const ACTIVE_POPULATION_TARGET = 80; // maintain a full market, not just startup fill
+const MAX_BULK_SPAWN_PER_CYCLE = 10; // avoid slamming Postgres connection limits
 let bulkSpawning = false;
 
 async function _bulkSpawn() {
@@ -166,15 +167,16 @@ async function _bulkSpawn() {
   bulkSpawning = true;
   try {
     const count = await prisma.coin.count({ where: { isActive: true } });
-    const toSpawn = Math.max(0, ACTIVE_POPULATION_TARGET - count);
+    const needed = Math.max(0, ACTIVE_POPULATION_TARGET - count);
+    const toSpawn = Math.min(needed, MAX_BULK_SPAWN_PER_CYCLE);
     if (toSpawn === 0) return;
-    console.log(`🏭  Bulk spawn: ${toSpawn} coins to reach ${ACTIVE_POPULATION_TARGET} (currently ${count})`);
+    console.log(`🏭  Bulk spawn: ${toSpawn}/${needed} coins toward ${ACTIVE_POPULATION_TARGET} (currently ${count})`);
     for (let i = 0; i < toSpawn; i++) {
       await spawnCoin();
-      // small stagger so the price engine doesn't get slammed
-      await new Promise(r => setTimeout(r, 150));
+      // stagger DB writes so Railway/Postgres doesn't hit connection limits
+      await new Promise(r => setTimeout(r, 750));
     }
-    console.log(`🏭  Bulk spawn complete — ${toSpawn} coins added`);
+    console.log(`🏭  Bulk spawn cycle complete — ${toSpawn} coins added`);
   } catch (err) {
     console.error('Bulk spawn error:', err.message);
   } finally {
