@@ -33,6 +33,11 @@ function playTone({ freq, freq2, duration = 0.35, volume = 0.25, type = 'sine', 
   } catch (_) {}
 }
 
+/** Call this synchronously inside a click handler to unlock AudioContext before any async work */
+export function primeAudio() {
+  try { getCtx(); } catch (_) {}
+}
+
 /** 🟢 Buy — bright ascending double-ding */
 export function playBuy() {
   playTone({ freq: 523, freq2: 784, duration: 0.3, volume: 0.20, type: 'sine' });        // C5 → G5

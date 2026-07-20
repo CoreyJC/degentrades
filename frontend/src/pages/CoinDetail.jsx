@@ -317,6 +317,7 @@ export default function CoinDetail() {
 
   async function executeBuy(solAmount) {
     if (!requireAuth()) return;
+    primeAudio();
     const sol = parseFloat(solAmount);
     if (!sol || sol <= 0) return push('Enter a valid SOL amount', 'error');
     setBusy(true);
@@ -342,6 +343,7 @@ export default function CoinDetail() {
 
   async function executeSell(coinAmount) {
     if (!requireAuth()) return;
+    primeAudio();
     const amt = parseFloat(coinAmount);
     if (!amt || amt <= 0) return push('Enter a valid amount', 'error');
     setBusy(true);

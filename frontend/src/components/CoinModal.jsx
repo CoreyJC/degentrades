@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, createSeriesMarkers } from 'lightweight-charts';
 import axios from 'axios';
-import { playBuy, playSell } from '../utils/sounds';
+import { playBuy, playSell, primeAudio } from '../utils/sounds';
 import { useAuth }   from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useToast }  from '../context/ToastContext';
@@ -424,6 +424,7 @@ export default function CoinModal({ coinId, onClose }) {
 
   async function executeBuy(solAmount) {
     if (!requireAuth()) return;
+    primeAudio(); // unlock AudioContext synchronously before async work
     const sol = parseFloat(solAmount);
     if (!sol || sol <= 0) return push('Enter a valid SOL amount', 'error');
     setBusy(true);
@@ -456,7 +457,7 @@ export default function CoinModal({ coinId, onClose }) {
     // Capture cost basis before the sell clears the holding
     const costBasis = holding ? holding.avgBuyPrice * holding.amount : 0;
     const isFullExit = sellAll || (holding && Math.abs(amt - holding.amount) < 0.000001);
-
+    primeAudio(); // unlock AudioContext synchronously before async work
     setBusy(true);
     try {
       const payload = sellAll
