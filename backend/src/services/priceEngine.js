@@ -30,6 +30,16 @@ let initialized = false;
 
 function _rand(min, max) { return min + Math.random() * (max - min); }
 
+// Cap upside velocity so legendary runs take time instead of one lucky minute.
+// 0.6%/sec means a $2K → $200M run needs ~32 minutes of nonstop green ticks.
+function _capUpsideVelocity(s, nextPrice) {
+  if (nextPrice <= s.price) return nextPrice;
+  const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
+  if (ageMin >= 30) return nextPrice;
+  const maxUpPct = 0.006;
+  return Math.min(nextPrice, s.price * (1 + maxUpPct));
+}
+
 // ── Fate assignment ────────────────────────────────────────────────────────────
 
 function _assignFate() {
@@ -492,7 +502,7 @@ function applyTradeImpact(coinId, impactSol, isBuy) {
   const impactPct = isBuy ? Math.min(rawImpact, 5.0) : Math.min(rawImpact, 0.85);
 
   if (isBuy) {
-    s.price     = s.price * (1 + impactPct);
+    s.price     = _capUpsideVelocity(s, s.price * (1 + impactPct));
     s.momentum  = Math.min(s.momentum + impactPct * 1.5, 1.0);
     s.volatility = Math.min(s.volatility * (1 + impactPct * 0.5), 5.0);
     // Buying a stalled coin wakes it up - you're the catalyst
@@ -597,7 +607,7 @@ async function tick() {
     _updatePhase(s);
 
     const prev = s.price;
-    const next = _nextPrice(coinId, s);
+    const next = _capUpsideVelocity(s, _nextPrice(coinId, s));
     s.price    = next;
 
     // ── Candle ──
