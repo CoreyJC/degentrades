@@ -158,7 +158,7 @@ async function spawnCoin() {
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
-const ACTIVE_POPULATION_TARGET = 80; // maintain a full market, not just startup fill
+const ACTIVE_POPULATION_TARGET = 150; // maintain a full market, not just startup fill
 const MAX_BULK_SPAWN_PER_CYCLE = 10; // avoid slamming Postgres connection limits
 let bulkSpawning = false;
 
