@@ -331,53 +331,6 @@ export default function Earnings() {
           </div>
         </section>
 
-        {/* ── Tokenomics ── */}
-        <section>
-          <h2 className="text-lg font-bold text-gray-200 mb-6">Tokenomics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-              <h3 className="font-bold text-white">Fee Distribution</h3>
-              {[
-                { label: '50% → $DEGEN Holders', color: '#00ff88', pct: 50 },
-                { label: '30% → Treasury / Dev', color: '#facc15', pct: 30 },
-                { label: '20% → Buyback & Burn', color: '#a78bfa', pct: 20 },
-              ].map((row) => (
-                <div key={row.label}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-400">{row.label}</span>
-                    <span className="font-bold" style={{ color: row.color }}>{row.pct}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${row.pct}%`, background: row.color }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-3">
-              <h3 className="font-bold text-white">Token Details</h3>
-              {[
-                { label: 'Name',       value: '$DEGEN' },
-                { label: 'Network',    value: 'Solana' },
-                { label: 'Platform',   value: 'pump.fun' },
-                { label: 'Supply',     value: '1,000,000,000' },
-                { label: 'Contract',   value: 'TBA at launch' },
-                { label: 'Fee share',  value: '50% of 1% protocol fee' },
-                { label: 'Payouts',    value: 'Weekly, pro-rata by holdings' },
-              ].map((r) => (
-                <div key={r.label} className="flex justify-between text-sm">
-                  <span className="text-gray-500">{r.label}</span>
-                  <span className="text-gray-200 font-medium">{r.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ── CTA footer ── */}
         <section className="text-center py-8 border-t border-gray-800">
           <p className="text-gray-500 text-sm mb-4">
