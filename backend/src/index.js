@@ -10,8 +10,9 @@ const tradeRoutes = require('./routes/trade');
 const portfolioRoutes = require('./routes/portfolio');
 const leaderboardRoutes = require('./routes/leaderboard');
 const earningsRoutes    = require('./routes/earnings');
-const priceEngine     = require('./services/priceEngine');
-const tokenGenerator  = require('./services/tokenGenerator');
+const priceEngine          = require('./services/priceEngine');
+const tokenGenerator       = require('./services/tokenGenerator');
+const distributionService  = require('./services/distributionService');
 
 const app = express();
 const server = http.createServer(app);
@@ -51,6 +52,9 @@ priceEngine.start(io);
 
 // Start token generator — spawns new coins every 2-5 min
 tokenGenerator.start();
+
+// Start SOL distribution service (no-ops if env vars missing)
+distributionService.init();
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {

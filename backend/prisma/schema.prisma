@@ -56,6 +56,27 @@ model Holding {
   @@unique([userId, coinId])
 }
 
+model DistributionEpoch {
+  id             String               @id @default(cuid())
+  totalSol       Float
+  distributedSol Float                @default(0)
+  startedAt      DateTime             @default(now())
+  endsAt         DateTime
+  status         String               @default("active") // active | completed | cancelled
+  payouts        DistributionPayout[]
+}
+
+model DistributionPayout {
+  id        String            @id @default(cuid())
+  epochId   String
+  wallet    String
+  amountSol Float
+  txSig     String?
+  status    String            @default("pending") // pending | confirmed | failed
+  createdAt DateTime          @default(now())
+  epoch     DistributionEpoch @relation(fields: [epochId], references: [id])
+}
+
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
