@@ -96,13 +96,13 @@ function _updatePhase(s) {
   const ageMin        = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
   const marketCap     = s.price * TOTAL_SUPPLY;
 
-  // Probabilistic ceiling pressure - no hard wall, but dump chance ramps up as coin approaches ceiling.
-  // Starts building at 50% of ceiling, peaks at ~15% chance/tick when 20% past ceiling.
+  // Probabilistic ceiling pressure - ramps up hard as coin approaches its ceiling.
+  // Starts at 40% of ceiling, peaks at 55% chance/tick when 30% past ceiling.
   if ((phase === 'pump' || phase === 'early') && s.ceiling > 0) {
     const ratio = marketCap / s.ceiling;
-    if (ratio > 0.5) {
-      // Sigmoid-style ramp: near 0% at 50% ceiling, ~15% at 120% ceiling
-      const pressure = Math.min(0.15, Math.pow(Math.max(0, ratio - 0.5), 1.8) * 0.7);
+    if (ratio > 0.40) {
+      // Strong ramp: ~2% at 40% ceiling, ~30% at ceiling, ~55% at 130% ceiling
+      const pressure = Math.min(0.55, Math.pow(Math.max(0, ratio - 0.40), 1.4) * 0.85);
       if (Math.random() < pressure) {
         s.phase = 'distribution';
         return;
