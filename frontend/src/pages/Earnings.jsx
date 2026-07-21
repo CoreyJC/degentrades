@@ -257,7 +257,7 @@ export default function Earnings() {
             {[
               { icon: '🪙', step: '1', title: 'Buy $DEGEN', desc: 'Get the token on pump.fun. Your share of payouts is proportional to how much you hold.' },
               { icon: '🔗', step: '2', title: 'Register your wallet', desc: 'Paste your Solana wallet address below. This is where your SOL earnings land automatically.' },
-              { icon: '💸', step: '3', title: 'Get paid every 60s', desc: 'When fees accumulate, the engine wakes up and distributes them to all $DEGEN holders over 10 hours.' },
+              { icon: '💸', step: '3', title: 'Get paid every 60s', desc: 'Fees are distributed automatically every 60 seconds to all $DEGEN holders. Each distribution batch is spread over 10 hours to keep payouts steady — new batches start whenever more fees come in.' },
             ].map(s => (
               <div key={s.step} className="bg-gray-900 border border-gray-800 rounded-xl p-6 flex flex-col gap-3">
                 <div className="flex items-center gap-3">
