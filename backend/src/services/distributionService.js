@@ -1,44 +1,31 @@
 /**
  * DegenTrades Distribution Service
  *
- * Monitors the treasury wallet for new SOL. When funds arrive, creates a
- * distribution epoch that drips the total amount over 10 hours (600 × 60s ticks)
- * to all $DEGEN holders who have registered their wallet on the platform.
- *
- * Env vars required to activate:
- *   TREASURY_WALLET_PUBLIC_KEY  — treasury SOL address (to monitor)
- *   TREASURY_PRIVATE_KEY        — bs58 or JSON-array private key (to sign sends)
- *   SOLANA_RPC_URL              — Helius / QuickNode / mainnet RPC
- *
- * Optional:
- *   DEGEN_TOKEN_MINT            — token CA; if set, only wallets holding > 0
- *                                 tokens are eligible and payouts are proportional
- *                                 to balance. If unset, equal split among all
- *                                 registered wallets.
+ * Monitors treasury wallet, creates epochs, and drips SOL to $DEGEN holders.
+ * Solana sending is enabled when TREASURY_WALLET_PUBLIC_KEY + TREASURY_PRIVATE_KEY
+ * + SOLANA_RPC_URL are all set. Until then the service tracks epochs in DB only.
  */
 
 const prisma = require('../lib/prisma');
 
-// Solana libs are lazy-loaded inside init() so a missing/broken package
-// never prevents the main server from starting.
-let Connection, Keypair, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL;
-let TOKEN_PROGRAM_ID;
+const DISTRIBUTION_HOURS  = 10;
+const DISTRIBUTION_MS     = DISTRIBUTION_HOURS * 60 * 60 * 1000;
+const TICK_MS             = 60 * 1000;
+const MIN_PAYOUT_SOL      = 0.00001;
+const DETECTION_THRESHOLD = 0.005;
 
-const DISTRIBUTION_HOURS   = 10;
-const DISTRIBUTION_MS      = DISTRIBUTION_HOURS * 60 * 60 * 1000;
-const TICK_MS              = 60 * 1000;          // 60 seconds
-const MIN_PAYOUT_LAMPORTS  = 10_000;             // ~0.00001 SOL — skip dust
-const DETECTION_THRESHOLD  = 0.005;              // ignore sub-0.005 SOL bumps (rounding/fees)
+let tickTimer       = null;
+let ready           = false;
+let solanaReady     = false;
+let lastBalance     = 0;
 
+// Solana refs (populated lazily when env vars present)
 let connection      = null;
 let treasuryKeypair = null;
 let treasuryPubkey  = null;
 let degenMint       = null;
-let lastBalance     = null;   // SOL float, seeded on startup
-let tickTimer       = null;
-let ready           = false;
-
-// ─── Initialise ────────────────────────────────────────────────────────────
+let LAMPORTS_PER_SOL = 1_000_000_000;
+let TOKEN_PROGRAM_ID = null;
 
 async function init() {
   const pub  = process.env.TREASURY_WALLET_PUBLIC_KEY;
@@ -46,52 +33,43 @@ async function init() {
   const rpc  = process.env.SOLANA_RPC_URL;
 
   if (!pub || !priv || !rpc) {
-    console.log('⚠️  Distribution service disabled — set TREASURY_WALLET_PUBLIC_KEY, TREASURY_PRIVATE_KEY, SOLANA_RPC_URL to enable.');
+    console.log('ℹ️  Distribution service: env vars not set — epoch tracking only (no SOL sends).');
+    ready = true;
+    tickTimer = setInterval(tick, TICK_MS);
     return;
   }
 
   try {
-    // Lazy-load Solana packages here so server starts even if they’re unavailable
     const web3 = require('@solana/web3.js');
-    Connection              = web3.Connection;
-    Keypair                 = web3.Keypair;
-    PublicKey               = web3.PublicKey;
-    Transaction             = web3.Transaction;
-    SystemProgram           = web3.SystemProgram;
-    sendAndConfirmTransaction = web3.sendAndConfirmTransaction;
-    LAMPORTS_PER_SOL        = web3.LAMPORTS_PER_SOL;
-    TOKEN_PROGRAM_ID        = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    const bs58 = require('bs58');
 
-    connection     = new Connection(rpc, 'confirmed');
-    treasuryPubkey = new PublicKey(pub);
+    LAMPORTS_PER_SOL  = web3.LAMPORTS_PER_SOL;
+    TOKEN_PROGRAM_ID  = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    connection        = new web3.Connection(rpc, 'confirmed');
+    treasuryPubkey    = new web3.PublicKey(pub);
 
-    // Support both bs58 and JSON-array private key formats
     let secretKey;
     if (priv.trim().startsWith('[')) {
       secretKey = Uint8Array.from(JSON.parse(priv));
     } else {
-      const bs58 = require('bs58');
       secretKey = bs58.decode(priv);
     }
-    treasuryKeypair = Keypair.fromSecretKey(secretKey);
+    treasuryKeypair = web3.Keypair.fromSecretKey(secretKey);
 
     if (process.env.DEGEN_TOKEN_MINT) {
-      degenMint = new PublicKey(process.env.DEGEN_TOKEN_MINT);
-      console.log(`🪙  $DEGEN mint: ${process.env.DEGEN_TOKEN_MINT}`);
-    } else {
-      console.log('ℹ️  DEGEN_TOKEN_MINT not set — equal split among all registered wallets');
+      degenMint = new web3.PublicKey(process.env.DEGEN_TOKEN_MINT);
     }
 
-    // Seed balance so we don't re-distribute existing funds on restart
     lastBalance = (await connection.getBalance(treasuryPubkey)) / LAMPORTS_PER_SOL;
-    console.log(`💰 Distribution service ready. Treasury: ${lastBalance.toFixed(4)} SOL`);
-
-    ready = true;
-    tickTimer = setInterval(tick, TICK_MS);
-    tick(); // immediate first tick
+    solanaReady = true;
+    console.log(`💰 Distribution service LIVE. Treasury: ${lastBalance.toFixed(4)} SOL`);
   } catch (err) {
-    console.error('Distribution service init failed:', err.message);
+    console.warn(`⚠️  Distribution service: Solana init failed (${err.message}) — epoch tracking only.`);
   }
+
+  ready = true;
+  tickTimer = setInterval(tick, TICK_MS);
+  tick();
 }
 
 function stop() {
@@ -99,112 +77,78 @@ function stop() {
   ready = false;
 }
 
-// ─── Main tick ─────────────────────────────────────────────────────────────
-
 async function tick() {
   if (!ready) return;
   try {
-    await detectNewFunds();
+    if (solanaReady) await detectNewFunds();
     await processActiveEpochs();
   } catch (err) {
     console.error('Distribution tick error:', err.message);
   }
 }
 
-// ─── Fund detection ────────────────────────────────────────────────────────
-
 async function detectNewFunds() {
+  const web3 = require('@solana/web3.js');
   const lamports = await connection.getBalance(treasuryPubkey);
-  const currentBalance = lamports / LAMPORTS_PER_SOL;
-  const delta = currentBalance - lastBalance;
+  const current  = lamports / LAMPORTS_PER_SOL;
+  const delta    = current - lastBalance;
 
   if (delta > DETECTION_THRESHOLD) {
     console.log(`🚀 New funds: +${delta.toFixed(4)} SOL → opening distribution epoch`);
-
     const now    = new Date();
     const endsAt = new Date(now.getTime() + DISTRIBUTION_MS);
-
     await prisma.distributionEpoch.create({
       data: { totalSol: delta, distributedSol: 0, endsAt, status: 'active' },
     });
-
-    lastBalance = currentBalance;
-    console.log(`📅 Epoch created — distributing ${delta.toFixed(4)} SOL over ${DISTRIBUTION_HOURS}h`);
+    lastBalance = current;
   } else {
-    lastBalance = currentBalance;
+    lastBalance = current;
   }
 }
 
-// ─── Epoch processing ──────────────────────────────────────────────────────
-
 async function processActiveEpochs() {
-  const epochs = await prisma.distributionEpoch.findMany({
-    where: { status: 'active' },
-  });
-
-  for (const epoch of epochs) {
-    await processEpochTick(epoch);
-  }
+  const epochs = await prisma.distributionEpoch.findMany({ where: { status: 'active' } });
+  for (const epoch of epochs) await processEpochTick(epoch);
 }
 
 async function processEpochTick(epoch) {
-  const now       = new Date();
-  const endsAt    = new Date(epoch.endsAt);
+  const now      = new Date();
+  const endsAt   = new Date(epoch.endsAt);
   const remaining = epoch.totalSol - epoch.distributedSol;
 
-  // Epoch expired or fully distributed
-  if (now >= endsAt || remaining < MIN_PAYOUT_LAMPORTS / LAMPORTS_PER_SOL) {
-    await prisma.distributionEpoch.update({
-      where: { id: epoch.id },
-      data:  { status: 'completed' },
-    });
-    console.log(`✅ Epoch ${epoch.id.slice(-6)} completed — distributed ${epoch.distributedSol.toFixed(4)} SOL`);
+  if (now >= endsAt || remaining < MIN_PAYOUT_SOL) {
+    await prisma.distributionEpoch.update({ where: { id: epoch.id }, data: { status: 'completed' } });
     return;
   }
 
-  // How much to send this tick (pro-rate remaining over remaining time)
-  const msLeft         = endsAt - now;
-  const ticksLeft      = Math.max(1, Math.ceil(msLeft / TICK_MS));
-  const tickAmountSol  = remaining / ticksLeft;
+  if (!solanaReady) return; // can't send without Solana connection
 
-  if (tickAmountSol * LAMPORTS_PER_SOL < MIN_PAYOUT_LAMPORTS) return;
+  const msLeft       = endsAt - now;
+  const ticksLeft    = Math.max(1, Math.ceil(msLeft / TICK_MS));
+  const tickAmount   = remaining / ticksLeft;
+  if (tickAmount < MIN_PAYOUT_SOL) return;
 
-  // Get eligible holders and their weights
   const holders = await getEligibleHolders();
-  if (holders.length === 0) {
-    console.log('⚠️  No eligible holders this tick — skipping');
-    return;
-  }
+  if (!holders.length) return;
 
-  const totalWeight  = holders.reduce((s, h) => s + h.weight, 0);
-  let totalSent      = 0;
+  const totalWeight = holders.reduce((s, h) => s + h.weight, 0);
+  let totalSent = 0;
 
   for (const holder of holders) {
-    const share     = (holder.weight / totalWeight) * tickAmountSol;
-    const lamports  = Math.floor(share * LAMPORTS_PER_SOL);
-    if (lamports < MIN_PAYOUT_LAMPORTS) continue;
+    const share    = (holder.weight / totalWeight) * tickAmount;
+    const lamports = Math.floor(share * LAMPORTS_PER_SOL);
+    if (lamports < 1000) continue;
 
     try {
       const sig = await sendSol(holder.wallet, lamports);
       await prisma.distributionPayout.create({
-        data: {
-          epochId:   epoch.id,
-          wallet:    holder.wallet,
-          amountSol: lamports / LAMPORTS_PER_SOL,
-          txSig:     sig,
-          status:    'confirmed',
-        },
+        data: { epochId: epoch.id, wallet: holder.wallet, amountSol: lamports / LAMPORTS_PER_SOL, txSig: sig, status: 'confirmed' },
       });
       totalSent += lamports / LAMPORTS_PER_SOL;
     } catch (err) {
       console.error(`❌ Send failed to ${holder.wallet}: ${err.message}`);
       await prisma.distributionPayout.create({
-        data: {
-          epochId:   epoch.id,
-          wallet:    holder.wallet,
-          amountSol: lamports / LAMPORTS_PER_SOL,
-          status:    'failed',
-        },
+        data: { epochId: epoch.id, wallet: holder.wallet, amountSol: lamports / LAMPORTS_PER_SOL, status: 'failed' },
       });
     }
   }
@@ -214,26 +158,21 @@ async function processEpochTick(epoch) {
       where: { id: epoch.id },
       data:  { distributedSol: { increment: totalSent } },
     });
-    console.log(`💸 Tick — sent ${totalSent.toFixed(6)} SOL to ${holders.length} holder(s)`);
-    lastBalance -= totalSent; // adjust so next balance read doesn't treat outgoing as income
+    lastBalance -= totalSent;
   }
 }
 
-// ─── Holder resolution ─────────────────────────────────────────────────────
-
 async function getEligibleHolders() {
-  // All wallets registered on the platform
   const registered = await prisma.user.findMany({
     where:  { walletAddress: { not: null } },
     select: { walletAddress: true },
   });
 
   if (!degenMint) {
-    // Token not launched yet — equal weight to all registered wallets
     return registered.map(u => ({ wallet: u.walletAddress, weight: 1 }));
   }
 
-  // Fetch ALL $DEGEN token accounts in a single RPC call, then cross-reference
+  const web3 = require('@solana/web3.js');
   const tokenAccounts = await connection.getParsedProgramAccounts(TOKEN_PROGRAM_ID, {
     filters: [
       { dataSize: 165 },
@@ -241,45 +180,35 @@ async function getEligibleHolders() {
     ],
   });
 
-  // Build wallet → balance map
   const balanceMap = new Map();
   for (const { account } of tokenAccounts) {
     const info    = account.data?.parsed?.info;
     if (!info) continue;
-    const owner   = info.owner;
     const balance = parseFloat(info.tokenAmount?.uiAmountString || '0');
-    if (balance > 0) {
-      balanceMap.set(owner, (balanceMap.get(owner) || 0) + balance);
-    }
+    if (balance > 0) balanceMap.set(info.owner, (balanceMap.get(info.owner) || 0) + balance);
   }
 
-  // Only eligible if: registered on platform AND holds > 0 $DEGEN
-  const holders = [];
-  for (const { walletAddress } of registered) {
-    const balance = balanceMap.get(walletAddress) || 0;
-    if (balance > 0) holders.push({ wallet: walletAddress, weight: balance });
-  }
-  return holders;
+  return registered
+    .map(u => ({ wallet: u.walletAddress, weight: balanceMap.get(u.walletAddress) || 0 }))
+    .filter(h => h.weight > 0);
 }
 
-// ─── SOL transfer ──────────────────────────────────────────────────────────
-
 async function sendSol(toWallet, lamports) {
-  const tx = new Transaction().add(
-    SystemProgram.transfer({
+  const web3 = require('@solana/web3.js');
+  const tx = new web3.Transaction().add(
+    web3.SystemProgram.transfer({
       fromPubkey: treasuryKeypair.publicKey,
-      toPubkey:   new PublicKey(toWallet),
+      toPubkey:   new web3.PublicKey(toWallet),
       lamports,
     })
   );
-  return sendAndConfirmTransaction(connection, tx, [treasuryKeypair]);
+  return web3.sendAndConfirmTransaction(connection, tx, [treasuryKeypair]);
 }
-
-// ─── Status helper (used by API route) ─────────────────────────────────────
 
 function getStatus() {
   return {
     ready,
+    solanaReady,
     treasuryAddress: treasuryPubkey?.toBase58() || null,
     tokenMint:       degenMint?.toBase58()       || null,
     lastBalanceSol:  lastBalance,
