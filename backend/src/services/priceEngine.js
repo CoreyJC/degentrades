@@ -64,9 +64,9 @@ function _capUpsideVelocity(s, nextPrice) {
   if (nextPrice <= s.price) return nextPrice;
   // Only apply to legendary runners, and only after 5 min (newborn spike window)
   if ((s.ceiling ?? 0) < 10_000_000) return nextPrice;
-  const ageMin = (Date.now() - new Date(s.createdAt).getTime()) / 60_000;
-  if (ageMin < 5) return nextPrice;
-  const maxUpPct = 0.25; // 25% per tick max for legend runs - still fast but not instant
+  const ageSec = (Date.now() - new Date(s.createdAt).getTime()) / 1_000;
+  if (ageSec < 30) return nextPrice; // 30s newborn window only
+  const maxUpPct = 0.07; // 7% per tick max — prevents single-candle x5 jumps
   return Math.min(nextPrice, s.price * (1 + maxUpPct));
 }
 
@@ -401,7 +401,7 @@ function _nextPrice(coinId, s) {
       if (roll < t) {
         s.momentum = Math.min(s.momentum + 0.5, 1.0);
         s.volatility = Math.min(s.volatility * 2, 5.0);
-        const pumpMult = isLegend ? _rand(2.0, 8.0) : _rand(1.0, 5.0);
+        const pumpMult = isLegend ? _rand(0.25, 0.80) : _rand(0.15, 0.50);
         return p * (1 + pumpMult);
       }
     } else if (fate === 'pumper') {
