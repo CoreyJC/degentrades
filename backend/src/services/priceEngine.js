@@ -42,6 +42,20 @@ function _capUpsideVelocity(s, nextPrice) {
   return Math.min(nextPrice, s.price * (1 + maxUpPct));
 }
 
+// Pre-migration dampen: slow coins down as they approach $69K so they linger
+// in the "About to Migrate" zone instead of blasting through in one tick.
+// Kicks in at $35K MC, tightens progressively — at $65K+ only tiny green candles allowed.
+function _preMigrationDampen(s, nextPrice) {
+  if (s.migrated) return nextPrice;
+  if (nextPrice <= s.price) return nextPrice; // only limit upside
+  const mc = s.price * TOTAL_SUPPLY;
+  if (mc < 35_000) return nextPrice;          // not in range yet
+  const progress = Math.min(1, (mc - 35_000) / (MIGRATION_THRESHOLD - 35_000));
+  // 40% max gain at $35K → 5% max gain right at $69K
+  const maxUpPct = 0.40 * (1 - progress) + 0.05 * progress;
+  return Math.min(nextPrice, s.price * (1 + maxUpPct));
+}
+
 // ── Fate assignment ────────────────────────────────────────────────────────────
 
 function _assignFate() {
@@ -110,6 +124,24 @@ function _updatePhase(s) {
     // Protect from instant distribution for 10 ticks after a user buy
     // (large buy spikes price -> instant new ATH -> 1-tick natural correction -> athRatio < threshold -> distribution)
     if (s.lastUserBuyTick != null && tickCount - s.lastUserBuyTick < 10) return;
+
+    // ── Pre-migration consolidation barrier ──────────────────────────────────
+    // Coins approaching $69K stall and fight instead of blasting through.
+    // Kicks in at 55% of migration ($38K), peaks at 85% ($58K).
+    // Legendary runners (ceiling >> $69K) feel less resistance — they’re meant to moon.
+    if (!s.migrated && !isLegend) {
+      const migProgress = marketCap / MIGRATION_THRESHOLD; // 0→1+
+      if (migProgress > 0.55) {
+        // Ramp: ~3% chance at $38K, ~30% at $55K, ~45% at $65K
+        const barrierChance = Math.min(0.45, Math.pow((migProgress - 0.55) / 0.45, 1.2) * 0.55);
+        if (Math.random() < barrierChance) {
+          s.phase = 'consolidation';
+          s.consolidationStart = Date.now();
+          return;
+        }
+      }
+    }
+
     // Any pumping coin can enter consolidation - back-and-forth fighting
     // Runners: frequent + starts low MC | Pumpers: moderate | Bleeders: rare + only mid-range
     const consolidationChance =
@@ -678,7 +710,7 @@ async function tick() {
     _updatePhase(s);
 
     const prev = s.price;
-    let next = _capUpsideVelocity(s, _nextPrice(coinId, s));
+    let next = _preMigrationDampen(s, _capUpsideVelocity(s, _nextPrice(coinId, s)));
     s.price    = next;
 
     // ── Candle ──
