@@ -59,7 +59,7 @@ export function useCoins(socket, pushToast) {
         if (prev.find((c) => c.id === coin.id)) return prev;
         return [coin, ...prev];
       });
-      pushToast?.(`🪙 New token: ${coin.name} (${coin.ticker})`, 'new', 5000);
+
     }
 
     function onCoinDeleted({ coinId, name, ticker, finalPrice }) {
