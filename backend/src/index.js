@@ -9,6 +9,7 @@ const coinsRoutes = require('./routes/coins');
 const tradeRoutes = require('./routes/trade');
 const portfolioRoutes = require('./routes/portfolio');
 const leaderboardRoutes = require('./routes/leaderboard');
+const earningsRoutes    = require('./routes/earnings');
 const priceEngine     = require('./services/priceEngine');
 const tokenGenerator  = require('./services/tokenGenerator');
 
@@ -34,6 +35,7 @@ app.use('/api/coins', coinsRoutes);
 app.use('/api/trade', tradeRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/earnings',    earningsRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

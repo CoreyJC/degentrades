@@ -8,6 +8,7 @@ import Market from './pages/Market';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
 import CoinDetail from './pages/CoinDetail';
+import Earnings from './pages/Earnings';
 import Nav from './components/Nav';
 
 function ProtectedRoute({ children }) {
@@ -26,6 +27,7 @@ function AppInner() {
         <Route path="/"            element={<Market />} />
         <Route path="/coin/:id"    element={<CoinDetail />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/earnings"    element={<Earnings />} />
         <Route path="/portfolio"   element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
         <Route path="*"            element={<Navigate to="/" replace />} />
       </Routes>

@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  password     String
-  username     String        @unique
-  createdAt    DateTime      @default(now())
-  portfolio    Portfolio?
-  holdings     Holding[]
-  transactions Transaction[]
+  id            String        @id @default(cuid())
+  email         String        @unique
+  password      String
+  username      String        @unique
+  walletAddress String?       @unique
+  createdAt     DateTime      @default(now())
+  portfolio     Portfolio?
+  holdings      Holding[]
+  transactions  Transaction[]
 }
 
 model Portfolio {
