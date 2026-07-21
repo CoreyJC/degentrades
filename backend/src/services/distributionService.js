@@ -68,7 +68,7 @@ async function init() {
       secretKey = Uint8Array.from(JSON.parse(priv));
     } else {
       const bs58 = require('bs58');
-      secretKey = bs58.default?.decode ? bs58.default.decode(priv) : bs58.decode(priv);
+      secretKey = bs58.decode(priv);
     }
     treasuryKeypair = Keypair.fromSecretKey(secretKey);
 
