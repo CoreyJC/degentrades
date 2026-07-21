@@ -834,7 +834,7 @@ export default function CoinModal({ coinId, onClose }) {
                     })()}
 
                     <button
-                      onClick={sell}
+                      onClick={() => sell()}
                       disabled={busy || !coinAmt || parseFloat(coinAmt) <= 0 || (user && !holding)}
                       className="w-full bg-red-700 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed
                         text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
