@@ -30,6 +30,34 @@ let initialized = false;
 
 function _rand(min, max) { return min + Math.random() * (max - min); }
 
+// Add realistic intrabar wicks — price discovery within a candle that doesn't
+// affect the close. Creates the wick structure visible on real charts.
+function _addWicks(candle, s) {
+  const phase = s.phase;
+  const body  = Math.abs(candle.close - candle.open);
+  const ref   = Math.max(candle.open, candle.close);
+
+  // Base wick: fraction of price (creates structure at all price levels)
+  const priceWick = ref * _rand(0.003, 0.018);
+  // Body wick: proportional to candle size (big moves = big wicks)
+  const bodyWick  = body * _rand(0.2, 2.0);
+
+  // Phase multiplier — choppy phases get longer wicks
+  const factor =
+    phase === 'distribution' || phase === 'consolidation' ? _rand(1.2, 3.0) :
+    phase === 'bleed'   ? _rand(1.0, 2.5) :
+    phase === 'pump'    ? _rand(0.2, 1.0) :
+    phase === 'early'   ? _rand(0.4, 1.8) :
+                          _rand(0.3, 1.2);
+
+  const totalWick = (priceWick + bodyWick) * factor;
+  // Distribute between upper/lower (skewed by phase — pumps have lower wicks, dumps upper)
+  const upperRatio = phase === 'pump' ? _rand(0.15, 0.40) : phase === 'bleed' ? _rand(0.55, 0.85) : _rand(0.30, 0.70);
+
+  candle.high = Math.max(candle.high, candle.high + totalWick * upperRatio);
+  candle.low  = Math.max(1e-14, Math.min(candle.low,  candle.low  - totalWick * (1 - upperRatio)));
+}
+
 // Cap upside velocity only for legendary runners to prevent single-tick moons.
 // Normal coins pump freely; only coins with ceiling >= $10M get a soft cap after 5 min.
 function _capUpsideVelocity(s, nextPrice) {
@@ -327,19 +355,29 @@ function _nextPrice(coinId, s) {
     return Math.max(p * (1 + dir * pct), 1e-14);
   }
 
-  // ── EARLY - quiet accumulation, tiny moves, no rugs ──────────────────────
+  // ── EARLY - quiet accumulation: mostly flat, rare spikes ───────────────────
   if (phase === 'early') {
-    // 5% chance of a surprise early pump to get momentum going
-    if (Math.random() < 0.05) {
-      const pump = _rand(0.08, 0.35);
-      s.momentum = Math.min(s.momentum + 0.4, 1.0);
-      s.volatility = Math.min(s.volatility * 1.5, 5.0);
+    const r = Math.random();
+    // Sudden pump spike (4%) — the moment a coin gets noticed
+    if (r < 0.04) {
+      const pump = _rand(0.12, 0.45);
+      s.momentum   = Math.min(s.momentum + 0.5, 1.0);
+      s.volatility = Math.min(s.volatility * 1.8, 5.0);
       return p * (1 + pump);
     }
-    // Otherwise tiny sideways movement
-    const pct = _rand(0.002, 0.015);
-    const upChance = 0.5 + momentum * 0.2;
-    const dir = Math.random() < upChance ? 1 : -1;
+    // Sudden dump spike (3%) — early sellers / early panic
+    if (r < 0.07) {
+      s.momentum = Math.max(s.momentum - 0.3, -1.0);
+      return Math.max(p * (1 - _rand(0.06, 0.22)), 1e-14);
+    }
+    // Near-flat tick (40%) — accumulation looks dead
+    if (r < 0.47) {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      return Math.max(p * (1 + dir * _rand(0.0001, 0.003)), 1e-14);
+    }
+    // Small move (rest) — gentle drift
+    const pct = _rand(0.001, 0.010);
+    const dir  = Math.random() < 0.5 + momentum * 0.15 ? 1 : -1;
     return Math.max(p * (1 + dir * pct), 1e-14);
   }
 
@@ -371,31 +409,44 @@ function _nextPrice(coinId, s) {
       if (roll < t) { s.momentum = Math.min(s.momentum + 0.4, 1.0); s.volatility = Math.min(s.volatility * 1.5, 5.0); return p * (1 + _rand(0.4, 1.5)); }
     }
 
-    // Regular pump
-    const pumpChance = fate === 'runner' ? 0.22 : fate === 'pumper' ? 0.16 : 0.07;
-    t += pumpChance;
-    if (roll < t) { s.momentum = Math.min(s.momentum + 0.3, 1.0); s.volatility = Math.min(s.volatility * 1.2, 5.0); return p * (1 + _rand(0.06, 0.30)); }
+    // Pullback candle — red candle in an uptrend (creates realistic wick/body structure)
+    const pullbackChance = fate === 'runner' ? 0.10 : fate === 'pumper' ? 0.13 : 0.18;
+    t += pullbackChance;
+    if (roll < t) {
+      s.momentum = Math.max(s.momentum - 0.15, -0.4);
+      return Math.max(p * (1 - _rand(0.04, 0.16)), 1e-14);
+    }
 
-    // Minor pump
-    const minorPumpChance = fate === 'runner' ? 0.22 : fate === 'pumper' ? 0.17 : 0.11;
-    t += minorPumpChance;
-    if (roll < t) { s.momentum = Math.min(s.momentum + 0.15, 1.0); return p * (1 + _rand(0.02, 0.08)); }
+    // Regular pump (varying sizes — fat tails)
+    const pumpChance = fate === 'runner' ? 0.18 : fate === 'pumper' ? 0.13 : 0.06;
+    t += pumpChance;
+    if (roll < t) {
+      s.momentum   = Math.min(s.momentum + 0.3, 1.0);
+      s.volatility = Math.min(s.volatility * 1.2, 5.0);
+      // Vary sizes: mostly small, occasionally large
+      const size = Math.random() < 0.20 ? _rand(0.15, 0.40) : _rand(0.03, 0.15);
+      return p * (1 + size);
+    }
+
+    // Near-flat / tiny green (common in real charts between bigger moves)
+    t += 0.20;
+    if (roll < t) { return p * (1 + _rand(0.001, 0.010)); }
 
     // Normal (momentum-biased upward in pump phase)
-    t += 0.42;
+    t += 0.32;
     if (roll < t) {
-      const upBias = fate === 'runner' ? 0.70 : fate === 'pumper' ? 0.60 : 0.48;
-      const dir = Math.random() < upBias + momentum * 0.15 ? 1 : -1;
-      return Math.max(p * (1 + dir * _rand(0.003, 0.022) * s.volatility), 1e-14);
+      const upBias = fate === 'runner' ? 0.68 : fate === 'pumper' ? 0.58 : 0.46;
+      const dir = Math.random() < upBias + momentum * 0.12 ? 1 : -1;
+      return Math.max(p * (1 + dir * _rand(0.004, 0.025) * s.volatility), 1e-14);
     }
 
     // Minor dump
     t += 0.08;
-    if (roll < t) { s.momentum = Math.max(s.momentum - 0.15, -1.0); return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14); }
+    if (roll < t) { s.momentum = Math.max(s.momentum - 0.15, -1.0); return Math.max(p * (1 - _rand(0.02, 0.09)), 1e-14); }
 
-    // Dump (no big dump in pump phase - saves that for distribution/bleed)
+    // Dump
     s.momentum = Math.max(s.momentum - 0.2, -1.0);
-    return Math.max(p * (1 - _rand(0.08, 0.20)), 1e-14);
+    return Math.max(p * (1 - _rand(0.06, 0.18)), 1e-14);
   }
 
   // ── DISTRIBUTION - topping out, selling pressure ──────────────────────────
@@ -677,17 +728,19 @@ async function _rugCoin(coinId, finalPrice) {
 function _candleVolume(prev, next, s) {
   const changePct = prev > 0 ? Math.abs((next - prev) / prev) : 0;
   // Base: exponentially distributed random (log-normal feel, wide variance)
-  const base = Math.pow(Math.random(), 0.4) * 300 + Math.random() * 150;
-  // Price-move amplifier: big moves get big volume
-  const moveAmp = changePct * 8000 * (1 + Math.random() * 2);
-  // Phase multiplier
-  const phaseMult = s.phase === 'pump' ? (1.2 + Math.random() * 0.8)
-                  : s.phase === 'distribution' ? (1.0 + Math.random() * 1.0)
-                  : s.phase === 'dying' ? (0.3 + Math.random() * 0.4)
-                  : (0.6 + Math.random() * 0.6);
-  // Rare volume spike (~5% of candles)
-  const spike = Math.random() < 0.05 ? (3 + Math.random() * 7) : 1.0;
-  return (base + moveAmp) * phaseMult * spike;
+  // Base: near-zero in accumulation, grows with phase activity
+  const phaseBase =
+    s.phase === 'early'        ? Math.pow(Math.random(), 2.0) * 40  + Math.random() * 20  :
+    s.phase === 'pump'         ? Math.pow(Math.random(), 0.3) * 400 + Math.random() * 200 :
+    s.phase === 'consolidation'? Math.pow(Math.random(), 0.4) * 300 + Math.random() * 150 :
+    s.phase === 'distribution' ? Math.pow(Math.random(), 0.5) * 250 + Math.random() * 100 :
+    s.phase === 'dying'        ? Math.pow(Math.random(), 2.0) * 30  + Math.random() * 15  :
+                                 Math.pow(Math.random(), 1.0) * 80  + Math.random() * 40;
+  // Price-move amplifier: big moves = big volume (most important for realistic look)
+  const moveAmp = changePct * 12000 * (0.5 + Math.random() * 2.5);
+  // Rare volume spike (~4% of candles) — whale enter/exit
+  const spike = Math.random() < 0.04 ? (5 + Math.random() * 15) : 1.0;
+  return (phaseBase + moveAmp) * spike;
 }
 
 let tickCount = 0;
@@ -718,19 +771,24 @@ async function tick() {
     const lastCandle = candles[candles.length - 1];
 
     if (lastCandle && lastCandle.time === nowSec) {
-      lastCandle.high   = Math.max(lastCandle.high, next);
-      lastCandle.low    = Math.min(lastCandle.low, next);
       lastCandle.close  = next;
       lastCandle.volume += _candleVolume(prev, next, s);
+      // Extend wicks each sub-tick within the same candle
+      const tempCandle = { open: lastCandle.open, close: next, high: Math.max(lastCandle.high, next), low: Math.min(lastCandle.low, next) };
+      _addWicks(tempCandle, s);
+      lastCandle.high = Math.max(lastCandle.high, tempCandle.high);
+      lastCandle.low  = Math.min(lastCandle.low,  tempCandle.low);
     } else {
-      candles.push({
+      const newCandle = {
         time:   nowSec,
         open:   prev,
         high:   Math.max(prev, next),
         low:    Math.min(prev, next),
         close:  next,
         volume: _candleVolume(prev, next, s),
-      });
+      };
+      _addWicks(newCandle, s);
+      candles.push(newCandle);
       if (candles.length > MAX_CANDLES) candles.shift();
     }
 
