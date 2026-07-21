@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 function fmtSol(n) {
-  if (n == null) return '—';
+  if (n == null) return '0 SOL';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M SOL`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(2)}K SOL`;
   return `${n.toFixed(4)} SOL`;
@@ -183,12 +183,12 @@ export default function Earnings() {
             Token Launching on pump.fun · Soon
           </div>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
-            Hold <span style={{ color: '#00ff88' }}>$DEGEN</span> — Earn Real SOL
+            Hold <span style={{ color: '#00ff88' }}>$DEGEN</span> · Earn Real SOL
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto mb-8">
             Every trade on DegenTrades generates a <strong className="text-white">1% protocol fee</strong>.{' '}
             <strong style={{ color: '#00ff88' }}>50% of those fees</strong> are automatically sent to{' '}
-            <strong className="text-white">$DEGEN holders</strong> every 60 seconds — no claiming required.
+            <strong className="text-white">$DEGEN holders</strong> every 60 seconds. No claiming required.
           </p>
           <a href="https://pump.fun" target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all hover:scale-105"
@@ -211,7 +211,7 @@ export default function Earnings() {
             <span className={`w-2 h-2 rounded-full ${svcReady ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
             {svcReady ? (
               <>
-                Distribution engine <strong>live</strong> — monitoring treasury{' '}
+                Distribution engine <strong>live</strong> · monitoring treasury{' '}
                 <span className="font-mono text-xs opacity-70">
                   {stats.distributionService.treasuryAddress?.slice(0, 8)}…
                 </span>
@@ -220,7 +220,7 @@ export default function Earnings() {
                   : ` · awaiting token CA`}
               </>
             ) : (
-              'Distribution engine offline — treasury wallet not configured yet'
+              'Distribution engine offline. Treasury wallet not configured yet.'
             )}
           </div>
         )}
@@ -366,7 +366,7 @@ export default function Earnings() {
                               className="hover:text-white transition-colors">
                               {p.txSig.slice(0, 8)}…
                             </a>
-                          : '—'
+                          : 'N/A'
                         }
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{fmtDate(p.createdAt)}</td>
