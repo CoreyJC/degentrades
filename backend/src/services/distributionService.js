@@ -17,20 +17,12 @@
  *                                 registered wallets.
  */
 
-const {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-  SystemProgram,
-  sendAndConfirmTransaction,
-  LAMPORTS_PER_SOL,
-} = require('@solana/web3.js');
-
 const prisma = require('../lib/prisma');
 
-// Solana token program (hardcoded to avoid extra dep)
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+// Solana libs are lazy-loaded inside init() so a missing/broken package
+// never prevents the main server from starting.
+let Connection, Keypair, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL;
+let TOKEN_PROGRAM_ID;
 
 const DISTRIBUTION_HOURS   = 10;
 const DISTRIBUTION_MS      = DISTRIBUTION_HOURS * 60 * 60 * 1000;
@@ -59,6 +51,17 @@ async function init() {
   }
 
   try {
+    // Lazy-load Solana packages here so server starts even if they’re unavailable
+    const web3 = require('@solana/web3.js');
+    Connection              = web3.Connection;
+    Keypair                 = web3.Keypair;
+    PublicKey               = web3.PublicKey;
+    Transaction             = web3.Transaction;
+    SystemProgram           = web3.SystemProgram;
+    sendAndConfirmTransaction = web3.sendAndConfirmTransaction;
+    LAMPORTS_PER_SOL        = web3.LAMPORTS_PER_SOL;
+    TOKEN_PROGRAM_ID        = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
     connection     = new Connection(rpc, 'confirmed');
     treasuryPubkey = new PublicKey(pub);
 

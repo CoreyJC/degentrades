@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "DistributionEpoch" (
+CREATE TABLE IF NOT EXISTS "DistributionEpoch" (
     "id"             TEXT NOT NULL,
     "totalSol"       DOUBLE PRECISION NOT NULL,
     "distributedSol" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -11,7 +11,7 @@ CREATE TABLE "DistributionEpoch" (
 );
 
 -- CreateTable
-CREATE TABLE "DistributionPayout" (
+CREATE TABLE IF NOT EXISTS "DistributionPayout" (
     "id"        TEXT NOT NULL,
     "epochId"   TEXT NOT NULL,
     "wallet"    TEXT NOT NULL,
