@@ -8,15 +8,35 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  email         String        @unique
+  id            String         @id @default(cuid())
+  email         String         @unique
   password      String
-  username      String        @unique
-  walletAddress String?       @unique
-  createdAt     DateTime      @default(now())
+  username      String         @unique
+  walletAddress String?        @unique
+  createdAt     DateTime       @default(now())
   portfolio     Portfolio?
   holdings      Holding[]
   transactions  Transaction[]
+  seasonRewards SeasonReward[]
+}
+
+model Season {
+  id        String         @id @default(cuid())
+  number    Int            @unique
+  startedAt DateTime       @default(now())
+  endedAt   DateTime?
+  status    String         @default("active") // active | completed
+  rewards   SeasonReward[]
+}
+
+model SeasonReward {
+  id       String  @id @default(cuid())
+  seasonId String
+  userId   String
+  rank     Int
+  bonusSol Float
+  season   Season  @relation(fields: [seasonId], references: [id])
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Portfolio {
