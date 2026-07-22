@@ -33,6 +33,39 @@ const DB_WRITE_EVERY = 5;
 
 function _rand(min, max) { return min + Math.random() * (max - min); }
 
+// ── Holder-based modifiers ────────────────────────────────────────────────────
+// Returns live risk/volatility factors derived from holder concentration.
+function _holderMods(s) {
+  const top     = s.topHolderPct ?? 50;
+  const holders = s.holderCount  ?? 100;
+
+  // Higher concentration = higher rug risk
+  const rugMult =
+    top >= 80 ? 2.8 :
+    top >= 60 ? 1.7 :
+    top >= 40 ? 1.2 :
+               0.80; // distributed bags = safer
+
+  // Fewer holders = thinner book = wilder swings
+  const volScale =
+    holders <  50  ? 1.40 :
+    holders <  150 ? 1.15 :
+    holders <  400 ? 1.00 :
+    holders <  800 ? 0.88 :
+                     0.75;
+
+  // Bundled + concentrated = periodic dev dump candles during chop/retrace
+  const devDumpChance = (s.isBundled && top > 55)
+    ? Math.min(0.12, (top - 55) / 400)  // up to 12% per tick at max concentration
+    : 0;
+
+  // Dev distributing (topHolderPct falling fast) = bullish pressure
+  const prevTop = s.topHolderPctPrev ?? top;
+  const devDistributing = (prevTop - top) > 1.5; // dropped >1.5% = sending bags out
+
+  return { rugMult, volScale, devDumpChance, devDistributing };
+}
+
 // ── Intrabar wicks ─────────────────────────────────────────────────────────────
 // Extends candle high/low beyond close to create realistic wick structure.
 function _addWicks(candle, phase) {
@@ -85,32 +118,45 @@ function _candleVolume(prev, next, s) {
 // SURGE (0-59s): mostly green, working toward cycleTarget
 function _surgeTick(s) {
   const p = s.price;
-  if (Math.random() < 0.0008) return 1e-14; // very rare rug
+  const { rugMult, volScale, devDistributing } = _holderMods(s);
+  if (Math.random() < 0.0008 * rugMult) return 1e-14;
   const r = Math.random();
-  if (r < 0.12) return Math.max(p * (1 - _rand(0.02, 0.09)), 1e-14); // pullback candle
-  if (r < 0.25) return p * (1 + _rand(-0.003, 0.006));                // flat/doji
-  // Green candle — size scales with remaining gap to target
+  // Dev distributing = fewer pullbacks, stronger greens
+  const pullbackThresh = devDistributing ? 0.07 : 0.12;
+  const dojiThresh     = devDistributing ? 0.17 : 0.25;
+  if (r < pullbackThresh) return Math.max(p * (1 - _rand(0.02, 0.09) * volScale), 1e-14);
+  if (r < dojiThresh)     return p * (1 + _rand(-0.003, 0.006));
   const toTarget = Math.max(s.cycleTarget / p - 1, 0.01);
-  const green    = _rand(0.005, Math.min(toTarget * 0.30, 0.10));
+  const greenBase = _rand(0.005, Math.min(toTarget * 0.30, 0.10));
+  const green     = greenBase * volScale * (devDistributing ? 1.20 : 1.0);
   return p * (1 + green);
 }
 
 // CHOP (60-119s): sideways fighting, big wicks both ways
 function _chopTick(s) {
   const p = s.price;
-  if (Math.random() < 0.003) return 1e-14; // dev sometimes dumps here
+  const { rugMult, volScale, devDumpChance, devDistributing } = _holderMods(s);
+  if (Math.random() < 0.003 * rugMult) return 1e-14;
+  // Bundled dev dump — sudden red candle from whale selling into chop
+  if (devDumpChance > 0 && Math.random() < devDumpChance) {
+    s.topHolderPct = Math.max(1, (s.topHolderPct ?? 50) - _rand(2, 6)); // dev sold some
+    return Math.max(p * (1 - _rand(0.10, 0.25) * volScale), 1e-14);
+  }
   const r = Math.random();
-  if (r < 0.13) return p * (1 + _rand(0.04, 0.13));                   // big green
-  if (r < 0.26) return Math.max(p * (1 - _rand(0.04, 0.11)), 1e-14);  // big red
-  if (r < 0.42) return p * (1 + _rand(0.01, 0.04));                   // small green
-  if (r < 0.58) return Math.max(p * (1 - _rand(0.01, 0.04)), 1e-14);  // small red
-  return p * (1 + _rand(-0.006, 0.006));                               // doji
+  // Dev distributing tilts chop slightly bullish
+  const bigGreenThresh = devDistributing ? 0.18 : 0.13;
+  if (r < bigGreenThresh) return p * (1 + _rand(0.04, 0.13) * volScale);
+  if (r < 0.26) return Math.max(p * (1 - _rand(0.04, 0.11) * volScale), 1e-14);
+  if (r < 0.42) return p * (1 + _rand(0.01, 0.04) * volScale);
+  if (r < 0.58) return Math.max(p * (1 - _rand(0.01, 0.04) * volScale), 1e-14);
+  return p * (1 + _rand(-0.006, 0.006));
 }
 
 // RESOLUTION (120-179s): final push or rollover
 function _resolutionTick(s) {
   const p = s.price;
-  if (Math.random() < 0.004) return 1e-14;
+  const { rugMult } = _holderMods(s);
+  if (Math.random() < 0.004 * rugMult) return 1e-14;
   const atTarget = p >= s.cycleTarget * 0.80;
   const r = Math.random();
   if (atTarget) {
@@ -129,10 +175,17 @@ function _resolutionTick(s) {
 // RETRACE: falling back toward floor — rug risk is highest here
 function _retraceTick(s) {
   const p = s.price;
+  const { rugMult, volScale, devDumpChance } = _holderMods(s);
   s.retraceTick = (s.retraceTick ?? 0) + 1;
 
-  // Rug: highest during retrace (dev is dumping)
-  if (Math.random() < 0.007 + s.retraceTick * 0.00015) return 1e-14;
+  // Rug: highest during retrace — concentration multiplies risk
+  if (Math.random() < (0.007 + s.retraceTick * 0.00015) * rugMult) return 1e-14;
+
+  // Bundled dev dump during retrace = accelerated fall
+  if (devDumpChance > 0 && Math.random() < devDumpChance * 1.5) {
+    s.topHolderPct = Math.max(1, (s.topHolderPct ?? 50) - _rand(3, 8));
+    return Math.max(p * (1 - _rand(0.15, 0.30)), 1e-14);
+  }
 
   const floor = s.cycleFloor;
   const mc    = p * TOTAL_SUPPLY;
@@ -168,17 +221,18 @@ function _retraceTick(s) {
     return Math.max(p * (1 - _rand(0.004, 0.018)), 1e-14);
   }
 
-  // Still falling
+  // Still falling — high concentration makes it fall faster
   if (Math.random() < 0.11) return p * (1 + _rand(0.01, 0.05)); // dead cat bounce
-  const fallSpeed = 0.012 + distToFloor * 0.09;
+  const fallSpeed = (0.012 + distToFloor * 0.09) * volScale;
   return Math.max(p * (1 - _rand(fallSpeed * 0.4, fallSpeed)), 1e-14);
 }
 
 // FADING: below floor, slow bleed to eventual rug
 function _fadeTick(s) {
   const p = s.price;
+  const { rugMult } = _holderMods(s);
   s.fadeTick = (s.fadeTick ?? 0) + 1;
-  if (Math.random() < 0.005 + s.fadeTick * 0.0003) return 1e-14;
+  if (Math.random() < (0.005 + s.fadeTick * 0.0003) * rugMult) return 1e-14;
   if (Math.random() < 0.07) return p * (1 + _rand(0.01, 0.04)); // false hope
   return Math.max(p * (1 - _rand(0.005, 0.028)), 1e-14);
 }
@@ -300,6 +354,7 @@ function _bootstrap(coin) {
       : Math.floor(1 + Math.random() * 2),
     isBundled,
     topHolderPct,
+    topHolderPctPrev: topHolderPct,
   };
 }
 
@@ -535,10 +590,15 @@ async function tick() {
     s.holderCount = Math.max(1, Math.round(s.holderCount + (targetHolders - s.holderCount) * convRate));
 
     // ── Top holder % ──
+    s.topHolderPctPrev = s.topHolderPct ?? (s.isBundled ? 75 : 25);
     if (s.topHolderPct == null) s.topHolderPct = s.isBundled ? 75 : 25;
     if (pctChange > 0.03 && s.topHolderPct > 1) {
       const dilution = s.isBundled ? 0.05 : 0.30;
       s.topHolderPct = Math.max(1, s.topHolderPct - pctChange * dilution * 100);
+    }
+    // Slow natural concentration decay even when flat (whales slowly sell)
+    if (s.topHolderPct > 10 && Math.random() < 0.02) {
+      s.topHolderPct = Math.max(1, s.topHolderPct - _rand(0.05, 0.20));
     }
 
     updates[coinId] = {
