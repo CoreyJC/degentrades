@@ -104,6 +104,14 @@ function randomRugProbability() {
   return 0.005 + Math.random() * 0.005; // 0.5% – 1.0%
 }
 
+// 60% bleeders, 30% pumpers, 10% runners
+function randomFate() {
+  const r = Math.random();
+  if (r < 0.60) return 'bleeder';
+  if (r < 0.90) return 'pumper';
+  return 'runner';
+}
+
 // ── Spawn ──────────────────────────────────────────────────────────────────────
 
 async function spawnCoin() {
@@ -126,8 +134,10 @@ async function spawnCoin() {
       },
     });
 
+    const fate = randomFate();
+
     // Register with price engine — ticks start immediately
-    priceEngine.registerCoin(coin);
+    priceEngine.registerCoin(coin, fate);
 
     // Broadcast to all connected clients
     const io = priceEngine.getIo();
@@ -145,9 +155,8 @@ async function spawnCoin() {
     }
 
     const rugPct = (rugProbability * 100).toFixed(2);
-    console.log(
-      `🪙  Spawned: ${name} (${ticker}) @ $${currentPrice.toExponential(3)} | rug base=${rugPct}%/tick`
-    );
+    console.log(`🪙 New coin: ${name} (${ticker}) - fate: ${fate}`);
+    console.log(`🪙  Spawned: ${name} (${ticker}) @ $${currentPrice.toExponential(3)} | rug base=${rugPct}%/tick`);
 
     return coin;
   } catch (err) {

@@ -178,8 +178,9 @@ function _retraceTick(s) {
   const { rugMult, volScale, devDumpChance } = _holderMods(s);
   s.retraceTick = (s.retraceTick ?? 0) + 1;
 
-  // Rug: highest during retrace — concentration multiplies risk
-  if (Math.random() < (0.007 + s.retraceTick * 0.00015) * rugMult) return 1e-14;
+  // Rug: highest during retrace — concentration + fate multiplies risk
+  const fateRugMult = s.fate === 'bleeder' ? 1.6 : s.fate === 'runner' ? 0.4 : 1.0;
+  if (Math.random() < (0.007 + s.retraceTick * 0.00015) * rugMult * fateRugMult) return 1e-14;
 
   // Bundled dev dump during retrace = accelerated fall
   if (devDumpChance > 0 && Math.random() < devDumpChance * 1.5) {
@@ -266,15 +267,20 @@ function _endCycle(s) {
   const mc       = p * TOTAL_SUPPLY;
   const pumpedWell = p >= s.cycleTarget * 0.70;
 
-  // Runner unlock: 3+ successful cycles, >$20K MC, 8% shot
-  if (pumpedWell && s.successfulCycles >= 2 && mc > 20_000 && Math.random() < 0.08) {
+  // Runner unlock — threshold depends on fate
+  const runnerCycles = s.fate === 'runner' ? 1 : s.fate === 'pumper' ? 2 : 3;
+  const runnerMcMin  = s.fate === 'runner' ? 8_000 : 20_000;
+  const runnerChance = s.fate === 'runner' ? 0.35 : s.fate === 'pumper' ? 0.14 : 0.05;
+  if (pumpedWell && s.successfulCycles >= runnerCycles && mc > runnerMcMin && Math.random() < runnerChance) {
     s.isRunner   = true;
     s.cyclePhase = 'runner';
-    console.log(`🚀 RUNNER: ${s.ticker} at $${mc.toFixed(0)} MC after ${s.successfulCycles + 1} cycles`);
+    console.log(`🚀 RUNNER [${s.fate}]: ${s.ticker} at $${mc.toFixed(0)} MC after ${s.successfulCycles + 1} cycles`);
     return p * (1 + _rand(0.03, 0.10));
   }
 
-  if (pumpedWell && Math.random() < 0.40) {
+  // Fate affects whether we retrace or continue
+  const continueChance = s.fate === 'runner' ? 0.60 : s.fate === 'pumper' ? 0.45 : 0.28;
+  if (pumpedWell && Math.random() < continueChance) {
     // ── Continue: floor rises, new higher target ──
     s.successfulCycles++;
     s.cycleFloor  = p * _rand(0.38, 0.55);
@@ -312,15 +318,24 @@ function _cycleTick(coinId, s) {
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
-function _bootstrap(coin) {
-  const startPrice   = coin.currentPrice || (START_MC / TOTAL_SUPPLY);
-  const firstPumpPct = _rand(0.25, 2.00); // 25-200% first cycle target
-  const cycleTarget  = startPrice * (1 + firstPumpPct);
+function _bootstrap(coin, fate = 'bleeder') {
+  const startPrice = coin.currentPrice || (START_MC / TOTAL_SUPPLY);
 
-  const isBundled    = Math.random() < 0.20;
-  const topHolderPct = isBundled
+  // Fate-based first pump target
+  const firstPumpPct =
+    fate === 'runner'  ? _rand(0.80, 3.00) :  // runners start aggressive
+    fate === 'pumper'  ? _rand(0.40, 1.80) :  // pumpers aim high
+                        _rand(0.15, 0.80);    // bleeders pump weak
+
+  const cycleTarget = startPrice * (1 + firstPumpPct);
+
+  // Runners are rarely bundled; bleeders more often are
+  const bundledChance = fate === 'runner' ? 0.05 : fate === 'pumper' ? 0.15 : 0.28;
+  const isBundled     = Math.random() < bundledChance;
+  const topHolderPct  = isBundled
     ? 60 + Math.random() * 30
-    : 5  + Math.random() * 25;
+    : fate === 'runner' ? 3 + Math.random() * 12   // runners have distributed bags
+    :                     5 + Math.random() * 25;
 
   state[coin.id] = {
     price:            startPrice,
@@ -332,22 +347,25 @@ function _bootstrap(coin) {
     name:             coin.name,
     ticker:           coin.ticker,
     baseRugProb:      coin.rugProbability ?? 0.007,
+    fate,
 
     // Cycle state
     cycleTick:        0,
     cyclePhase:       'surge',
     cycleTarget,
-    cycleFloor:       startPrice,       // floor = $2K MC start
+    cycleFloor:       startPrice,
     successfulCycles: 0,
     isRunner:         false,
     fadingOut:        false,
     fadeTick:         0,
     retraceTick:      0,
 
-    // S/R for post-migration
-    resistanceLevel:  null,
-    supportLevel:     null,
-    retestCount:      0,
+    // Post-migration narrative
+    resistanceLevel:    null,
+    supportLevel:       null,
+    retestCount:        0,
+    postMigPhase:       null,  // 'dump' | 'consolidation' | 'continuation' | 'bleed'
+    postMigTick:        0,
 
     holderCount:      isBundled
       ? Math.floor(80 + Math.random() * 300)
@@ -377,14 +395,14 @@ async function init() {
   console.log(`💹 Price engine v4 initialized — ${coins.length} coins loaded`);
 }
 
-function registerCoin(coin) {
+function registerCoin(coin, fate = 'bleeder') {
   if (state[coin.id]) return;
-  _bootstrap(coin);
+  _bootstrap(coin, fate);
   state[coin.id].price      = coin.currentPrice;
   state[coin.id].startPrice = coin.currentPrice;
   state[coin.id].ath        = coin.currentPrice;
   state[coin.id].createdAt  = coin.createdAt ?? new Date();
-  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) | target +${((state[coin.id].cycleTarget / coin.currentPrice - 1) * 100).toFixed(0)}%`);
+  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) [${fate}] | target +${((state[coin.id].cycleTarget / coin.currentPrice - 1) * 100).toFixed(0)}%`);
 }
 
 function removeCoin(coinId)      { delete state[coinId]; }
@@ -491,43 +509,68 @@ async function _rugCoin(coinId, finalPrice) {
 
 // ── Post-migration S/R retest (for migrated coins) ────────────────────────────
 // Migrated coins enter a ranging market with support/resistance levels.
+// POST-MIGRATION: narrative phases after hitting $69K
+// dump (30s) → consolidation (60s) → continuation pump OR bleed
 function _postMigrationTick(s) {
   const p = s.price;
+  s.postMigTick = (s.postMigTick ?? 0) + 1;
 
-  if (!s.resistanceLevel || !s.supportLevel) {
-    // No levels set — default bleed
+  // Initialize phase on first tick
+  if (!s.postMigPhase) {
+    s.postMigPhase = 'dump';
+    s.postMigTick  = 0;
+    // Migration price becomes resistance; support is 40% below
+    s.resistanceLevel = p;
+    s.supportLevel    = p * 0.60;
+    console.log(`🏛  MIGRATED: ${s.ticker} entering post-migration dump phase`);
+  }
+
+  // ── DUMP (first 30 ticks): sharp sell-off after DEX listing ────
+  if (s.postMigPhase === 'dump') {
     if (Math.random() < 0.004) return 1e-14;
-    const dir = Math.random() < 0.55 ? -1 : 1;
-    return Math.max(p * (1 + dir * _rand(0.005, 0.030)), 1e-14);
-  }
-
-  const nearRes  = p >= s.resistanceLevel * 0.92;
-  const nearSup  = p <= s.supportLevel   * 1.10;
-
-  if (nearRes) {
-    s.retestCount = (s.retestCount ?? 0) + 1;
-    const rejectChance = Math.min(0.80, 0.50 + s.retestCount * 0.08);
-    if (Math.random() < rejectChance) {
-      return Math.max(p * (1 - _rand(0.04, 0.14)), 1e-14);
+    if (s.postMigTick >= 30) {
+      s.postMigPhase = 'consolidation';
+      s.postMigTick  = 0;
+      console.log(`🏛  ${s.ticker} consolidating post-dump`);
+      return p * (1 + _rand(-0.01, 0.02));
     }
-    s.resistanceLevel = p * (1 + _rand(0.08, 0.20));
-    return p * (1 + _rand(0.03, 0.10));
+    // Mostly red with occasional dead-cat bounces
+    if (Math.random() < 0.15) return p * (1 + _rand(0.02, 0.08));  // dead cat
+    return Math.max(p * (1 - _rand(0.03, 0.12)), 1e-14);
   }
 
-  if (nearSup) {
-    const bounceChance = Math.max(0.15, 0.65 - (s.retestCount ?? 0) * 0.10);
-    if (Math.random() < bounceChance) {
-      return p * (1 + _rand(0.06, 0.22));
+  // ── CONSOLIDATION (60 ticks): tight chop at the lows ────
+  if (s.postMigPhase === 'consolidation') {
+    if (Math.random() < 0.003) return 1e-14;
+    if (s.postMigTick >= 60) {
+      // Decide: continuation pump (40%) or bleed (60%)
+      const doContinuation = Math.random() < 0.40;
+      s.postMigPhase = doContinuation ? 'continuation' : 'bleed';
+      s.postMigTick  = 0;
+      console.log(`🏛  ${s.ticker} post-migration: ${s.postMigPhase}`);
+      return p * (1 + _rand(-0.01, 0.03));
     }
-    s.resistanceLevel = s.supportLevel;
-    s.supportLevel    = p * (1 - _rand(0.20, 0.35));
-    s.retestCount     = 0;
-    return Math.max(p * (1 - _rand(0.08, 0.20)), 1e-14);
+    // Tight range chop
+    const dir = Math.random() < 0.50 ? -1 : 1;
+    return Math.max(p * (1 + dir * _rand(0.005, 0.025)), 1e-14);
   }
 
-  if (Math.random() < 0.003) return 1e-14;
-  const dir = Math.random() < 0.52 ? -1 : 1;
-  return Math.max(p * (1 + dir * _rand(0.008, 0.038)), 1e-14);
+  // ── CONTINUATION (pump attempt after migration) ────
+  if (s.postMigPhase === 'continuation') {
+    if (Math.random() < 0.003) return 1e-14;
+    const r = Math.random();
+    if (r < 0.10) return Math.max(p * (1 - _rand(0.03, 0.10)), 1e-14);  // pullback
+    if (r < 0.20) return p * (1 + _rand(0.001, 0.008));                  // flat
+    // Pump — but has diminishing returns; rug risk rises over time
+    if (s.postMigTick > 120 && Math.random() < 0.006) return 1e-14;      // late rug
+    return p * (1 + _rand(0.008, 0.045));
+  }
+
+  // ── BLEED (slow death) ────
+  s.postMigTick = s.postMigTick ?? 0;
+  if (Math.random() < 0.005 + s.postMigTick * 0.0002) return 1e-14;
+  if (Math.random() < 0.08) return p * (1 + _rand(0.01, 0.05));  // false hope
+  return Math.max(p * (1 - _rand(0.008, 0.035)), 1e-14);
 }
 
 // ── Tick ───────────────────────────────────────────────────────────────────────
