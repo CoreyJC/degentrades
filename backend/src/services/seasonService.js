@@ -64,7 +64,7 @@ async function buildLeaderboard() {
         return sum + h.amount * price;
       }, 0);
       const totalValue = (user.portfolio?.solBalance || 0) + holdingsValue;
-      const gainPct = ((totalValue - 100) / 100) * 100;
+      const gainPct = ((totalValue - 10) / 10) * 100;
       return {
         userId: user.id,
         username: user.username,
@@ -123,11 +123,11 @@ async function resetSeason() {
     const bonus = bonusMap[user.id] || 0;
     // Delete all holdings
     await prisma.holding.deleteMany({ where: { userId: user.id } });
-    // Reset balance to 100 + bonus
+    // Reset balance to 10 + bonus
     if (user.portfolio) {
       await prisma.portfolio.update({
         where: { userId: user.id },
-        data: { solBalance: 100 + bonus },
+        data: { solBalance: 10 + bonus },
       });
     }
   }

@@ -23,10 +23,10 @@ router.get('/', async (req, res) => {
           return sum + h.amount * price;
         }, 0);
         const totalValue = (user.portfolio?.solBalance || 0) + holdingsValue;
-        const gainPct = ((totalValue - 100) / 100) * 100;
+        const gainPct = ((totalValue - 10) / 10) * 100;
         return {
           username: user.username,
-          startingBalance: 100,
+          startingBalance: 10,
           currentValue: parseFloat(totalValue.toFixed(4)),
           gainPct: parseFloat(gainPct.toFixed(2)),
         };

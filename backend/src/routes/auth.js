@@ -27,7 +27,7 @@ router.post('/register', async (req, res) => {
         email,
         password: hashed,
         username,
-        portfolio: { create: { solBalance: 100.0 } },
+        portfolio: { create: { solBalance: 10.0 } },
       },
       include: { portfolio: true },
     });

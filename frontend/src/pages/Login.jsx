@@ -29,7 +29,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <div className="text-5xl mb-2">🎰</div>
           <h1 className="text-2xl font-bold text-white">DegenTrades</h1>
-          <p className="text-gray-500 text-sm mt-1">Memecoin simulator · 100 SOL to start</p>
+          <p className="text-gray-500 text-sm mt-1">Memecoin simulator · 10 SOL to start</p>
         </div>
 
         <form onSubmit={submit} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">

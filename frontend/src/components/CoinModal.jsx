@@ -10,7 +10,7 @@ import { useToast }  from '../context/ToastContext';
 const TOTAL_SUPPLY = 1_000_000_000;
 
 function fmt(p) {
-  if (p == null) return '—';
+  if (p == null) return '-';
   if (p < 0.000001) return p.toExponential(4);
   if (p < 0.0001)   return `$${p.toFixed(7)}`;
   if (p < 0.01)     return `$${p.toFixed(6)}`;
@@ -27,7 +27,7 @@ function fmtTokens(n) {
 }
 
 function fmtMC(mc) {
-  if (mc == null) return '—';
+  if (mc == null) return '-';
   if (mc >= 1_000_000_000) return `$${(mc / 1_000_000_000).toFixed(2)}B`;
   if (mc >= 1_000_000)     return `$${(mc / 1_000_000).toFixed(1)}M`;
   if (mc >= 1_000)         return `$${(mc / 1_000).toFixed(1)}K`;
@@ -77,7 +77,7 @@ function LoginGateModal({ onClose }) {
             className="w-full py-2.5 rounded-lg font-semibold text-sm transition-colors"
             style={{ backgroundColor: '#00ff88', color: '#0a0a0a' }}
           >
-            Sign Up — It's Free
+            Sign Up - It's Free
           </Link>
           <Link
             to="/login"
@@ -238,7 +238,7 @@ export default function CoinModal({ coinId, onClose }) {
     load();
   }, [coinId, user]);
 
-  // Chart — rAF ensures modal is painted before chart measures width
+  // Chart - rAF ensures modal is painted before chart measures width
   useEffect(() => {
     if (loading || rugged || !chartElRef.current) return;
 
@@ -335,7 +335,7 @@ export default function CoinModal({ coinId, onClose }) {
             }
           }).catch(() => {});
 
-        // autoSize handles resize — no manual ResizeObserver needed
+        // autoSize handles resize - no manual ResizeObserver needed
       } catch (err) {
         console.error('Chart init error:', err);
       }
@@ -859,7 +859,7 @@ export default function CoinModal({ coinId, onClose }) {
 
             <div className="text-5xl mb-3">{tradeResult.isWin ? '💰' : '💥'}</div>
             <div className="text-xl font-bold text-white mb-1">
-              {tradeResult.isWin ? 'Position Closed — Profit!' : 'Position Closed — Loss'}
+              {tradeResult.isWin ? 'Position Closed: Profit!' : 'Position Closed: Loss'}
             </div>
             <div className="text-gray-500 text-sm mb-6">${tradeResult.ticker}</div>
 
