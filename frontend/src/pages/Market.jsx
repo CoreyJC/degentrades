@@ -32,8 +32,9 @@ function StatCard({ label, value, color = 'text-white' }) {
 }
 
 function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
-  const mc   = getMC(coin);
-  const isUp = (coin.change24h ?? 0) >= 0;
+  const mc      = getMC(coin);
+  const isDying = mc < 1_000;
+  const isUp    = (coin.change24h ?? 0) >= 0;
   const ageMs = Date.now() - new Date(coin.createdAt ?? 0).getTime();
   const ageStr = ageMs < 60_000
     ? `${Math.floor(ageMs / 1_000)}s`
@@ -50,14 +51,21 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
     <div
       onClick={onClick}
       className={`
-        relative rounded-xl p-4 cursor-pointer transition-all duration-200
+        relative rounded-xl p-4 cursor-pointer transition-all duration-500
         border bg-gray-900/80 backdrop-blur-sm
         hover:scale-[1.01] hover:shadow-xl
-        ${isUp
-          ? 'border-green-900/50 hover:border-green-500/60 hover:shadow-green-900/20'
-          : 'border-gray-800 hover:border-red-800/60 hover:shadow-red-900/20'}
+        ${isDying
+          ? 'border-gray-800/30 opacity-30 grayscale pointer-events-none'
+          : isUp
+            ? 'border-green-900/50 hover:border-green-500/60 hover:shadow-green-900/20'
+            : 'border-gray-800 hover:border-red-800/60 hover:shadow-red-900/20'}
       `}
     >
+      {isDying && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 rounded-xl bg-gray-950/40">
+          <span className="text-gray-500 text-xs font-mono tracking-widest uppercase">💀 dying</span>
+        </div>
+      )}
       {/* Top row: name + change chip */}
       <div className="flex items-start justify-between mb-3">
         <div className="min-w-0 pr-2">

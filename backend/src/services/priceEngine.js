@@ -21,7 +21,8 @@ const RUG_THRESHOLD       = 0.0000001;
 const TOTAL_SUPPLY        = 1_000_000_000;
 const MIGRATION_THRESHOLD = 69_000;
 const START_MC            = 2_000;
-const FLOOR_MC_MIN        = 1_800; // below this → fading out
+const FLOOR_MC_MIN        = 1_000; // below this → fading out
+const DEAD_ZONE_MC        = 1_000; // below this → force fade + fast death
 
 // ── In-memory state ────────────────────────────────────────────────────────────
 const state = {};
@@ -230,9 +231,16 @@ function _retraceTick(s) {
 
 // FADING: below floor, slow bleed to eventual rug
 function _fadeTick(s) {
-  const p = s.price;
+  const p  = s.price;
+  const mc = p * TOTAL_SUPPLY;
   const { rugMult } = _holderMods(s);
   s.fadeTick = (s.fadeTick ?? 0) + 1;
+  // Below dead zone → high-speed death (dies in ~10-30s)
+  if (mc < DEAD_ZONE_MC) {
+    if (Math.random() < (0.08 + s.fadeTick * 0.004) * rugMult) return 1e-14;
+    if (Math.random() < 0.03) return p * (1 + _rand(0.01, 0.03)); // tiny false hope
+    return Math.max(p * (1 - _rand(0.03, 0.10)), 1e-14);
+  }
   if (Math.random() < (0.005 + s.fadeTick * 0.0003) * rugMult) return 1e-14;
   if (Math.random() < 0.07) return p * (1 + _rand(0.01, 0.04)); // false hope
   return Math.max(p * (1 - _rand(0.005, 0.028)), 1e-14);
@@ -624,6 +632,14 @@ async function tick() {
     }
 
     const marketCap = next * TOTAL_SUPPLY;
+
+    // ── Dead zone: force fading when MC drops below $1K ──
+    if (!s.migrated && marketCap < DEAD_ZONE_MC && !s.fadingOut) {
+      s.fadingOut = true;
+      s.fadeTick  = 0;
+      if (io) io.emit('coin_fading', { coinId, name: s.name, ticker: s.ticker, marketCap });
+      console.log(`💸 FADING: ${s.ticker} dropped below $1K MC ($${marketCap.toFixed(0)})`);
+    }
 
     // ── Holder count ──
     const mcInK         = marketCap / 1000;

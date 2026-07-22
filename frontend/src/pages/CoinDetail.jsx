@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts';
-import { playBuy, playSell } from '../utils/sounds';
+import { playBuy, playSell, primeAudio } from '../utils/sounds';
 
 const TOTAL_SUPPLY = 1_000_000_000;
 

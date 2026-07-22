@@ -32,7 +32,7 @@ export default function Nav() {
           {link('/',            '📈 Market')}
           {user && link('/portfolio', '💼 Portfolio')}
           {link('/leaderboard', '🏆 Leaderboard')}
-          {link('/earnings',    '💰 Earn')}
+          {/* {link('/earnings', '💰 Earn')} */}
         </div>
 
         {/* Right side */}
