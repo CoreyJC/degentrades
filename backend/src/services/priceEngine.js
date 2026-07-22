@@ -255,7 +255,7 @@ function _runnerTick(s) {
   // Near $69K — create drama (slowdown + big chop)
   if (mc > 45_000) {
     const progress = (mc - 45_000) / (MIGRATION_THRESHOLD - 45_000);
-    const dampen   = 1 - progress * 0.75;
+    const dampen   = 1 - progress * 0.45; // was 0.75 — eased slowdown near migration
     const r = Math.random();
     if (r < 0.18) return Math.max(p * (1 - _rand(0.03, 0.12)), 1e-14);
     if (r < 0.35) return p * (1 + _rand(0.001, 0.012));
@@ -277,8 +277,8 @@ function _endCycle(s) {
 
   // Runner unlock — threshold depends on fate
   const runnerCycles = s.fate === 'runner' ? 1 : s.fate === 'pumper' ? 2 : 3;
-  const runnerMcMin  = s.fate === 'runner' ? 8_000 : 20_000;
-  const runnerChance = s.fate === 'runner' ? 0.35 : s.fate === 'pumper' ? 0.14 : 0.05;
+  const runnerMcMin  = s.fate === 'runner' ? 5_000 : 15_000; // was 8K/20K
+  const runnerChance = s.fate === 'runner' ? 0.42 : s.fate === 'pumper' ? 0.20 : 0.08; // was 0.35/0.14/0.05
   if (pumpedWell && s.successfulCycles >= runnerCycles && mc > runnerMcMin && Math.random() < runnerChance) {
     s.isRunner   = true;
     s.cyclePhase = 'runner';
