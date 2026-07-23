@@ -551,10 +551,11 @@ function _postMigrationTick(s) {
   if (s.postMigPhase === 'consolidation') {
     if (Math.random() < 0.003) return 1e-14;
     if (s.postMigTick >= 60) {
-      // Decide: continuation pump (40%) or bleed (60%)
-      const doContinuation = Math.random() < 0.40;
+      // Decide: continuation pump (55%) or bleed (45%) — was 40/60
+      const doContinuation = Math.random() < 0.55;
       s.postMigPhase = doContinuation ? 'continuation' : 'bleed';
       s.postMigTick  = 0;
+      s.contCycles   = (s.contCycles ?? 0);  // track how many cont cycles completed
       console.log(`🏛  ${s.ticker} post-migration: ${s.postMigPhase}`);
       return p * (1 + _rand(-0.01, 0.03));
     }
@@ -565,13 +566,22 @@ function _postMigrationTick(s) {
 
   // ── CONTINUATION (pump attempt after migration) ────
   if (s.postMigPhase === 'continuation') {
-    if (Math.random() < 0.003) return 1e-14;
+    if (Math.random() < 0.002) return 1e-14;  // was 0.003
     const r = Math.random();
-    if (r < 0.10) return Math.max(p * (1 - _rand(0.03, 0.10)), 1e-14);  // pullback
-    if (r < 0.20) return p * (1 + _rand(0.001, 0.008));                  // flat
-    // Pump — but has diminishing returns; rug risk rises over time
-    if (s.postMigTick > 120 && Math.random() < 0.006) return 1e-14;      // late rug
-    return p * (1 + _rand(0.008, 0.045));
+    if (r < 0.08) return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14);  // pullback
+    if (r < 0.16) return p * (1 + _rand(0.001, 0.006));                  // flat
+    // Late-run second wind: after 250 ticks, 30% chance to re-consolidate and go again
+    if (s.postMigTick > 250) {
+      if (Math.random() < 0.30 && (s.contCycles ?? 0) < 2) {
+        s.postMigPhase = 'consolidation';
+        s.postMigTick  = 0;
+        s.contCycles   = (s.contCycles ?? 0) + 1;
+        console.log(`🔄 ${s.ticker} post-migration second wind (cycle ${s.contCycles})`);
+        return p * (1 + _rand(-0.02, 0.01));
+      }
+      if (Math.random() < 0.008) return 1e-14;  // late rug after long run
+    }
+    return p * (1 + _rand(0.010, 0.055));  // was 0.008-0.045
   }
 
   // ── BLEED (slow death) ────
