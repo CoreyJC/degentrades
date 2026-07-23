@@ -8,6 +8,7 @@
  */
 
 const { randomUUID } = require('crypto');
+const priceEngine     = require('./priceEngine');
 
 // ── Celebrity accounts ─────────────────────────────────────────────────────────
 const CELEBRITY_ACCOUNTS = [
@@ -205,8 +206,9 @@ function _triggerSmallTweet() {
   const account = _rand(SMALL_ACCOUNTS);
   const r = Math.random();
 
-  // Figure out a coin to reference (if any is in the buffer)
-  const recentWithCoins = tweetBuffer.filter(t => t.coinTicker);
+  // Figure out a coin to reference — only pick coins still alive in the price engine
+  const allPrices = priceEngine.getAllPrices();
+  const recentWithCoins = tweetBuffer.filter(t => t.coinId && allPrices[t.coinId] !== undefined);
   const refCoin = recentWithCoins.length > 0 && Math.random() < 0.7
     ? _rand(recentWithCoins)
     : null;
