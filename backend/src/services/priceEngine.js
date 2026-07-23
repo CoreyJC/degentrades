@@ -347,8 +347,10 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
     :                     5 + Math.random() * 25;
 
   // Celebrity coin overrides
-  const isCelebrity = options.isCelebrityCoin === true;
-  const effectiveFate = isCelebrity ? 'runner' : fate;
+  const isCelebrity  = options.isCelebrityCoin === true;
+  const isOfficial   = options.isOfficial === true;   // legit tweet-spawned coin
+  const isScamCopy   = options.isOfficial === false && !!options.tweetMention; // lookalike
+  const effectiveFate = (isCelebrity || isOfficial) ? 'runner' : isScamCopy ? 'bleeder' : fate;
 
   // Weighted post-migration ceiling for celebrity coins: 50% $10M, 35% $100M, 15% $1B
   let postMigrationCeiling = null;
@@ -369,8 +371,10 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
     baseRugProb:      coin.rugProbability ?? 0.007,
     fate:             effectiveFate,
 
-    // Celebrity flag
+    // Celebrity / official tweet flags
     isCelebrityCoin:    isCelebrity,
+    isOfficial,
+    isScamCopy,
     postMigrationCeiling,
 
     // Cycle state
@@ -379,7 +383,7 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
     cycleTarget,
     cycleFloor:       startPrice,
     successfulCycles: 0,
-    isRunner:         isCelebrity, // celebrity coins are runners immediately
+    isRunner:         isCelebrity || isOfficial, // celebrity + official = instant runner
     fadingOut:        false,
     fadeTick:         0,
     retraceTick:      0,
@@ -401,6 +405,9 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
 
   if (isCelebrity) {
     console.log(`🌟 CELEBRITY COIN: ${coin.name} (${coin.ticker}) ceiling=$${(postMigrationCeiling/1_000_000).toFixed(0)}M`);
+  }
+  if (isScamCopy) {
+    console.log(`💀 SCAM COPY: ${coin.name} (${coin.ticker}) — bleeder fate, will rug fast`);
   }
 }
 
@@ -563,11 +570,13 @@ function _postMigrationTick(s) {
 
   // ── DUMP: sharp sell-off after DEX listing, duration varies per coin ────
   if (s.postMigPhase === 'dump') {
-    // Higher rug risk in dump — some die here
-    if (Math.random() < 0.012) return 1e-14;
+    // Scam copies rug fast in the dump; official coins rarely die here
+    const dumpRugChance = s.isScamCopy ? 0.035 : s.isOfficial ? 0.003 : 0.012;
+    if (Math.random() < dumpRugChance) return 1e-14;
     if (s.postMigTick >= s.dumpDuration) {
-      // Some coins die at the end of dump instead of recovering
-      if (Math.random() < 0.18) {
+      // Scam copies often die at end of dump; official coins almost always recover
+      const failChance = s.isScamCopy ? 0.55 : s.isOfficial ? 0.05 : 0.18;
+      if (Math.random() < failChance) {
         s.postMigPhase = 'bleed';
         s.postMigTick  = 0;
         console.log(`🏛  ${s.ticker} failed to recover post-dump → bleeding`);
@@ -578,28 +587,31 @@ function _postMigrationTick(s) {
       console.log(`🏛  ${s.ticker} consolidating post-dump`);
       return p * (1 + _rand(-0.01, 0.02));
     }
-    // Mostly red, occasional dead-cat; dump intensity varies
+    // Scam copies dump harder; official coins dump shallower
+    const dumpMax = s.isScamCopy ? 0.14 : s.isOfficial ? 0.06 : 0.10;
     if (Math.random() < 0.12) return p * (1 + _rand(0.01, 0.06));  // dead cat
     if (Math.random() < 0.10) return p * (1 + _rand(-0.005, 0.01)); // brief pause
-    return Math.max(p * (1 - _rand(0.02, 0.10)), 1e-14);
+    return Math.max(p * (1 - _rand(0.02, dumpMax)), 1e-14);
   }
 
   // ── CONSOLIDATION: chop at the lows, duration varies per coin ────
   if (s.postMigPhase === 'consolidation') {
-    if (Math.random() < 0.004) return 1e-14;
+    const consolRugChance = s.isScamCopy ? 0.008 : 0.004;
+    if (Math.random() < consolRugChance) return 1e-14;
     if (s.postMigTick >= (s.consolDuration ?? 60)) {
-      // 45% continuation, 45% bleed, 10% more consolidation (indecision)
       const r = Math.random();
-      if (r < 0.10) {
-        s.consolDuration = _randInt(20, 50); // extend consolidation
+      // Official coins: 75% continuation. Scam copies: 20%. Normal: 45%.
+      const contThreshold = s.isOfficial ? 0.75 : s.isScamCopy ? 0.20 : 0.45;
+      if (r < 0.08 && !s.isScamCopy) {
+        s.consolDuration = _randInt(20, 50); // extend consolidation (not for scams)
         s.postMigTick = 0;
         return p * (1 + _rand(-0.01, 0.01));
       }
-      const doContinuation = r < 0.55; // 45% of remaining = continuation
+      const doContinuation = r < contThreshold;
       s.postMigPhase = doContinuation ? 'continuation' : 'bleed';
       s.postMigTick  = 0;
       s.contCycles   = (s.contCycles ?? 0);
-      s.distPhase    = false; // distribution flag
+      s.distPhase    = false;
       console.log(`🏛  ${s.ticker} post-migration: ${s.postMigPhase}`);
       return p * (1 + _rand(-0.01, 0.03));
     }
@@ -620,8 +632,9 @@ function _postMigrationTick(s) {
       return p * (1 + _rand(-0.04, -0.01));
     }
 
-    // Distribution phase: occasional 30-80 tick sell-off mid-run before possible resume
-    if (!s.distPhase && s.postMigTick > 60 && Math.random() < 0.003) {
+    // Distribution phase: rarer for official coins, more common for random coins
+    const distChance = s.isOfficial ? 0.001 : s.isScamCopy ? 0.008 : 0.003;
+    if (!s.distPhase && s.postMigTick > 60 && Math.random() < distChance) {
       s.distPhase     = true;
       s.distTick      = 0;
       s.distDuration  = _randInt(30, 80);
@@ -646,8 +659,10 @@ function _postMigrationTick(s) {
       return Math.max(p * (1 - _rand(0.005, 0.04)), 1e-14);
     }
 
-    // Rug risk rises as MC climbs
-    const mcMult = mc > 10_000_000 ? 0.010 : mc > 1_000_000 ? 0.005 : 0.002;
+    // Rug risk rises as MC climbs — official coins more resilient at altitude
+    const mcMult = s.isOfficial
+      ? (mc > 10_000_000 ? 0.004 : mc > 1_000_000 ? 0.002 : 0.001)
+      : (mc > 10_000_000 ? 0.010 : mc > 1_000_000 ? 0.005 : 0.002);
     if (Math.random() < mcMult) return 1e-14;
 
     const r = Math.random();

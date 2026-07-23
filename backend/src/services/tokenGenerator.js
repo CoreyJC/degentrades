@@ -193,7 +193,11 @@ async function spawnCoinWithOverrides(overrides = {}) {
     });
 
     const fate    = overrides.fate    ?? randomFate();
-    const options = overrides.isCelebrityCoin ? { isCelebrityCoin: true } : {};
+    const options = {
+      ...(overrides.isCelebrityCoin ? { isCelebrityCoin: true } : {}),
+      isOfficial:   overrides.isOfficial   ?? null,
+      tweetMention: overrides.tweetMention ?? null,
+    };
 
     // Register with price engine
     priceEngine.registerCoin(coin, fate, options);
