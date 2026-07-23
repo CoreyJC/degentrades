@@ -33,6 +33,7 @@ let tickCount   = 0;
 const DB_WRITE_EVERY = 5;
 
 function _rand(min, max) { return min + Math.random() * (max - min); }
+function _randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
 
 // ── Holder-based modifiers ────────────────────────────────────────────────────
 // Returns live risk/volatility factors derived from holder concentration.
@@ -542,78 +543,135 @@ function _postMigrationTick(s) {
   const p = s.price;
   s.postMigTick = (s.postMigTick ?? 0) + 1;
 
-  // Initialize phase on first tick
+  // Initialize phase on first tick — randomize duration per coin to desync mass dumps
   if (!s.postMigPhase) {
-    s.postMigPhase = 'dump';
-    s.postMigTick  = 0;
-    // Migration price becomes resistance; support is 40% below
+    s.postMigPhase    = 'dump';
+    s.postMigTick     = 0;
+    s.dumpDuration    = _randInt(15, 50);   // each coin dumps for different length
+    s.consolDuration  = _randInt(30, 100);  // consolidation length varies too
     s.resistanceLevel = p;
     s.supportLevel    = p * 0.60;
-    console.log(`🏛  MIGRATED: ${s.ticker} entering post-migration dump phase`);
+    // 20% of coins skip the dump entirely — straight out of gate
+    if (Math.random() < 0.20) {
+      s.postMigPhase = 'consolidation';
+      s.postMigTick  = 0;
+      console.log(`🏛  MIGRATED: ${s.ticker} — skipping dump, straight to consolidation`);
+    } else {
+      console.log(`🏛  MIGRATED: ${s.ticker} entering post-migration dump (${s.dumpDuration} ticks)`);
+    }
   }
 
-  // ── DUMP (first 30 ticks): sharp sell-off after DEX listing ────
+  // ── DUMP: sharp sell-off after DEX listing, duration varies per coin ────
   if (s.postMigPhase === 'dump') {
-    if (Math.random() < 0.004) return 1e-14;
-    if (s.postMigTick >= 30) {
+    // Higher rug risk in dump — some die here
+    if (Math.random() < 0.012) return 1e-14;
+    if (s.postMigTick >= s.dumpDuration) {
+      // Some coins die at the end of dump instead of recovering
+      if (Math.random() < 0.18) {
+        s.postMigPhase = 'bleed';
+        s.postMigTick  = 0;
+        console.log(`🏛  ${s.ticker} failed to recover post-dump → bleeding`);
+        return Math.max(p * (1 - _rand(0.02, 0.06)), 1e-14);
+      }
       s.postMigPhase = 'consolidation';
       s.postMigTick  = 0;
       console.log(`🏛  ${s.ticker} consolidating post-dump`);
       return p * (1 + _rand(-0.01, 0.02));
     }
-    // Mostly red with occasional dead-cat bounces
-    if (Math.random() < 0.15) return p * (1 + _rand(0.02, 0.08));  // dead cat
-    return Math.max(p * (1 - _rand(0.03, 0.12)), 1e-14);
+    // Mostly red, occasional dead-cat; dump intensity varies
+    if (Math.random() < 0.12) return p * (1 + _rand(0.01, 0.06));  // dead cat
+    if (Math.random() < 0.10) return p * (1 + _rand(-0.005, 0.01)); // brief pause
+    return Math.max(p * (1 - _rand(0.02, 0.10)), 1e-14);
   }
 
-  // ── CONSOLIDATION (60 ticks): tight chop at the lows ────
+  // ── CONSOLIDATION: chop at the lows, duration varies per coin ────
   if (s.postMigPhase === 'consolidation') {
-    if (Math.random() < 0.003) return 1e-14;
-    if (s.postMigTick >= 60) {
-      // Decide: continuation pump (55%) or bleed (45%) — was 40/60
-      const doContinuation = Math.random() < 0.55;
+    if (Math.random() < 0.004) return 1e-14;
+    if (s.postMigTick >= (s.consolDuration ?? 60)) {
+      // 45% continuation, 45% bleed, 10% more consolidation (indecision)
+      const r = Math.random();
+      if (r < 0.10) {
+        s.consolDuration = _randInt(20, 50); // extend consolidation
+        s.postMigTick = 0;
+        return p * (1 + _rand(-0.01, 0.01));
+      }
+      const doContinuation = r < 0.55; // 45% of remaining = continuation
       s.postMigPhase = doContinuation ? 'continuation' : 'bleed';
       s.postMigTick  = 0;
-      s.contCycles   = (s.contCycles ?? 0);  // track how many cont cycles completed
+      s.contCycles   = (s.contCycles ?? 0);
+      s.distPhase    = false; // distribution flag
       console.log(`🏛  ${s.ticker} post-migration: ${s.postMigPhase}`);
       return p * (1 + _rand(-0.01, 0.03));
     }
-    // Tight range chop
-    const dir = Math.random() < 0.50 ? -1 : 1;
-    return Math.max(p * (1 + dir * _rand(0.005, 0.025)), 1e-14);
+    // Chop: slight downward bias (lows get retested)
+    const dir = Math.random() < 0.45 ? 1 : -1;
+    return Math.max(p * (1 + dir * _rand(0.003, 0.022)), 1e-14);
   }
 
   // ── CONTINUATION (pump attempt after migration) ────
   if (s.postMigPhase === 'continuation') {
-    if (Math.random() < 0.002) return 1e-14;  // was 0.003
-    const r = Math.random();
-    if (r < 0.08) return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14);  // pullback
-    if (r < 0.16) return p * (1 + _rand(0.001, 0.006));                  // flat
+    const mc = p * TOTAL_SUPPLY;
 
     // Celebrity coin: check against ultra-high ceiling
-    if (s.isCelebrityCoin && s.postMigrationCeiling) {
-      const mc = p * TOTAL_SUPPLY;
-      if (mc >= s.postMigrationCeiling) {
-        // At or above ceiling — start bleeding
-        s.postMigPhase = 'bleed';
-        s.postMigTick  = 0;
-        console.log(`🌟 ${s.ticker} hit celebrity ceiling $${(s.postMigrationCeiling/1_000_000).toFixed(0)}M — bleeding`);
-        return p * (1 + _rand(-0.03, -0.01));
-      }
+    if (s.isCelebrityCoin && s.postMigrationCeiling && mc >= s.postMigrationCeiling) {
+      s.postMigPhase = 'bleed';
+      s.postMigTick  = 0;
+      console.log(`🌟 ${s.ticker} hit celebrity ceiling $${(s.postMigrationCeiling/1_000_000).toFixed(0)}M — bleeding`);
+      return p * (1 + _rand(-0.04, -0.01));
     }
 
-    // Late-run second wind: after 250 ticks, 30% chance to re-consolidate and go again
-    if (s.postMigTick > 250) {
-      if (Math.random() < 0.30 && (s.contCycles ?? 0) < 2) {
-        s.postMigPhase = 'consolidation';
-        s.postMigTick  = 0;
-        s.contCycles   = (s.contCycles ?? 0) + 1;
-        console.log(`🔄 ${s.ticker} post-migration second wind (cycle ${s.contCycles})`);
-        return p * (1 + _rand(-0.02, 0.01));
-      }
-      if (Math.random() < 0.008) return 1e-14;  // late rug after long run
+    // Distribution phase: occasional 30-80 tick sell-off mid-run before possible resume
+    if (!s.distPhase && s.postMigTick > 60 && Math.random() < 0.003) {
+      s.distPhase     = true;
+      s.distTick      = 0;
+      s.distDuration  = _randInt(30, 80);
+      console.log(`📉 ${s.ticker} post-migration distribution (${s.distDuration} ticks)`);
     }
-    return p * (1 + _rand(0.010, 0.055));  // was 0.008-0.045
+    if (s.distPhase) {
+      s.distTick = (s.distTick ?? 0) + 1;
+      if (s.distTick >= s.distDuration) {
+        s.distPhase = false;
+        // After distribution: 60% resume continuation, 40% bleed out
+        if (Math.random() < 0.40) {
+          s.postMigPhase = 'bleed';
+          s.postMigTick  = 0;
+          console.log(`📉 ${s.ticker} distribution → bleed`);
+          return Math.max(p * (1 - _rand(0.01, 0.04)), 1e-14);
+        }
+        console.log(`🔄 ${s.ticker} distribution → resuming continuation`);
+        return p * (1 + _rand(-0.01, 0.02));
+      }
+      if (Math.random() < 0.008) return 1e-14;
+      if (Math.random() < 0.12) return p * (1 + _rand(0.005, 0.03)); // relief bounce
+      return Math.max(p * (1 - _rand(0.005, 0.04)), 1e-14);
+    }
+
+    // Rug risk rises as MC climbs
+    const mcMult = mc > 10_000_000 ? 0.010 : mc > 1_000_000 ? 0.005 : 0.002;
+    if (Math.random() < mcMult) return 1e-14;
+
+    const r = Math.random();
+    if (r < 0.22) return Math.max(p * (1 - _rand(0.01, 0.07)), 1e-14);  // pullbacks (was 8%)
+    if (r < 0.32) return p * (1 + _rand(0.001, 0.008));                  // grind / flat
+
+    // Second wind: re-consolidate and go again
+    if (s.postMigTick > 200 && Math.random() < 0.004 && (s.contCycles ?? 0) < 3) {
+      s.postMigPhase = 'consolidation';
+      s.consolDuration = _randInt(20, 60);
+      s.postMigTick  = 0;
+      s.contCycles   = (s.contCycles ?? 0) + 1;
+      console.log(`🔄 ${s.ticker} post-migration second wind (cycle ${s.contCycles})`);
+      return p * (1 + _rand(-0.03, 0.01));
+    }
+
+    // Late rug risk
+    if (s.postMigTick > 300 && Math.random() < 0.004) return 1e-14;
+
+    // Pump — slower, choppier (was 1-5.5% per tick)
+    const pumpRate = mc > 5_000_000 ? _rand(0.003, 0.018)   // slows near top
+                   : mc > 500_000   ? _rand(0.005, 0.028)
+                   :                  _rand(0.008, 0.040);
+    return p * (1 + pumpRate);
   }
 
   // ── BLEED (slow death) ────
