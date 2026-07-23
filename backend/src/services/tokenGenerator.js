@@ -165,6 +165,64 @@ async function spawnCoin() {
   }
 }
 
+/**
+ * Spawn a coin with explicit overrides — used by tweetService for celebrity/scam coins.
+ */
+async function spawnCoinWithOverrides(overrides = {}) {
+  try {
+    const name = overrides.name || generateName();
+    const tickerBase = overrides.ticker
+      ? overrides.ticker.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6)
+      : nameToTickerBase(name);
+    const ticker         = await uniqueTicker(tickerBase);
+    const currentPrice   = randomStartingPrice();
+    const rugProbability = randomRugProbability();
+    const marketCap      = currentPrice * 1_000_000_000;
+
+    const coin = await prisma.coin.create({
+      data: {
+        name,
+        ticker,
+        currentPrice,
+        marketCap,
+        rugProbability,
+        isActive:     true,
+        tweetMention: overrides.tweetMention ?? null,
+        isOfficial:   overrides.isOfficial   ?? false,
+      },
+    });
+
+    const fate    = overrides.fate    ?? randomFate();
+    const options = overrides.isCelebrityCoin ? { isCelebrityCoin: true } : {};
+
+    // Register with price engine
+    priceEngine.registerCoin(coin, fate, options);
+
+    // Broadcast
+    const io = priceEngine.getIo();
+    if (io) {
+      io.emit('coin_added', {
+        id:           coin.id,
+        name:         coin.name,
+        ticker:       coin.ticker,
+        currentPrice: coin.currentPrice,
+        marketCap:    coin.currentPrice * 1_000_000_000,
+        rugProbability: coin.rugProbability,
+        createdAt:    coin.createdAt,
+        change24h:    0,
+        tweetMention: coin.tweetMention,
+        isOfficial:   coin.isOfficial,
+      });
+    }
+
+    console.log(`🐦 Tweet-spawned coin: ${name} (${ticker}) [${fate}] official=${overrides.isOfficial ?? false}`);
+    return coin;
+  } catch (err) {
+    console.error('tokenGenerator spawnCoinWithOverrides error:', err.message);
+    return null;
+  }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
 
 const ACTIVE_POPULATION_TARGET = 150; // maintain a full market, not just startup fill
@@ -210,4 +268,4 @@ function stop() {
   if (interval) clearInterval(interval);
 }
 
-module.exports = { start, stop, spawnCoin };
+module.exports = { start, stop, spawnCoin, spawnCoinWithOverrides };

@@ -326,7 +326,7 @@ function _cycleTick(coinId, s) {
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
-function _bootstrap(coin, fate = 'bleeder') {
+function _bootstrap(coin, fate = 'bleeder', options = {}) {
   const startPrice = coin.currentPrice || (START_MC / TOTAL_SUPPLY);
 
   // Fate-based first pump target
@@ -345,6 +345,17 @@ function _bootstrap(coin, fate = 'bleeder') {
     : fate === 'runner' ? 3 + Math.random() * 12   // runners have distributed bags
     :                     5 + Math.random() * 25;
 
+  // Celebrity coin overrides
+  const isCelebrity = options.isCelebrityCoin === true;
+  const effectiveFate = isCelebrity ? 'runner' : fate;
+
+  // Weighted post-migration ceiling for celebrity coins: 50% $10M, 35% $100M, 15% $1B
+  let postMigrationCeiling = null;
+  if (isCelebrity) {
+    const r = Math.random();
+    postMigrationCeiling = r < 0.50 ? 10_000_000 : r < 0.85 ? 100_000_000 : 1_000_000_000;
+  }
+
   state[coin.id] = {
     price:            startPrice,
     startPrice,
@@ -355,7 +366,11 @@ function _bootstrap(coin, fate = 'bleeder') {
     name:             coin.name,
     ticker:           coin.ticker,
     baseRugProb:      coin.rugProbability ?? 0.007,
-    fate,
+    fate:             effectiveFate,
+
+    // Celebrity flag
+    isCelebrityCoin:    isCelebrity,
+    postMigrationCeiling,
 
     // Cycle state
     cycleTick:        0,
@@ -363,7 +378,7 @@ function _bootstrap(coin, fate = 'bleeder') {
     cycleTarget,
     cycleFloor:       startPrice,
     successfulCycles: 0,
-    isRunner:         false,
+    isRunner:         isCelebrity, // celebrity coins are runners immediately
     fadingOut:        false,
     fadeTick:         0,
     retraceTick:      0,
@@ -382,6 +397,10 @@ function _bootstrap(coin, fate = 'bleeder') {
     topHolderPct,
     topHolderPctPrev: topHolderPct,
   };
+
+  if (isCelebrity) {
+    console.log(`🌟 CELEBRITY COIN: ${coin.name} (${coin.ticker}) ceiling=$${(postMigrationCeiling/1_000_000).toFixed(0)}M`);
+  }
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -403,14 +422,14 @@ async function init() {
   console.log(`💹 Price engine v4 initialized — ${coins.length} coins loaded`);
 }
 
-function registerCoin(coin, fate = 'bleeder') {
+function registerCoin(coin, fate = 'bleeder', options = {}) {
   if (state[coin.id]) return;
-  _bootstrap(coin, fate);
+  _bootstrap(coin, fate, options);
   state[coin.id].price      = coin.currentPrice;
   state[coin.id].startPrice = coin.currentPrice;
   state[coin.id].ath        = coin.currentPrice;
   state[coin.id].createdAt  = coin.createdAt ?? new Date();
-  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) [${fate}] | target +${((state[coin.id].cycleTarget / coin.currentPrice - 1) * 100).toFixed(0)}%`);
+  console.log(`🪙 New coin: ${coin.name} (${coin.ticker}) [${state[coin.id].fate}] | target +${((state[coin.id].cycleTarget / coin.currentPrice - 1) * 100).toFixed(0)}%`);
 }
 
 function removeCoin(coinId)      { delete state[coinId]; }
@@ -570,6 +589,19 @@ function _postMigrationTick(s) {
     const r = Math.random();
     if (r < 0.08) return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14);  // pullback
     if (r < 0.16) return p * (1 + _rand(0.001, 0.006));                  // flat
+
+    // Celebrity coin: check against ultra-high ceiling
+    if (s.isCelebrityCoin && s.postMigrationCeiling) {
+      const mc = p * TOTAL_SUPPLY;
+      if (mc >= s.postMigrationCeiling) {
+        // At or above ceiling — start bleeding
+        s.postMigPhase = 'bleed';
+        s.postMigTick  = 0;
+        console.log(`🌟 ${s.ticker} hit celebrity ceiling $${(s.postMigrationCeiling/1_000_000).toFixed(0)}M — bleeding`);
+        return p * (1 + _rand(-0.03, -0.01));
+      }
+    }
+
     // Late-run second wind: after 250 ticks, 30% chance to re-consolidate and go again
     if (s.postMigTick > 250) {
       if (Math.random() < 0.30 && (s.contCycles ?? 0) < 2) {

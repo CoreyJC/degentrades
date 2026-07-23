@@ -59,6 +59,8 @@ model Coin {
   isActive       Boolean       @default(true)
   migrated       Boolean       @default(false)
   migratedAt     DateTime?
+  tweetMention   String?       // handle that tweeted this coin e.g. "@realDonaldTrump"
+  isOfficial     Boolean       @default(false) // true = the real one, false = scam lookalike
   createdAt      DateTime      @default(now())
   holdings       Holding[]
   transactions   Transaction[]

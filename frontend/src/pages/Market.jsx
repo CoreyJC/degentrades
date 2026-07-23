@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { useToast }  from '../context/ToastContext';
 import { useCoins }  from '../hooks/useCoins';
 import CoinModal     from '../components/CoinModal';
+import TweetFeed     from '../components/TweetFeed';
 
 const TOTAL_SUPPLY        = 1_000_000_000;
 const MIGRATION_THRESHOLD = 69_000;
@@ -121,7 +122,18 @@ function CoinCard({ coin, showProgress = false, showBadge = false, onClick }) {
       {/* Bottom row: age + badge */}
       <div className="flex items-center justify-between text-xs text-gray-600">
         <span>🕐 {ageStr} ago</span>
-        {showBadge && <span className="text-purple-400 font-semibold">🚀 Migrated</span>}
+        <div className="flex items-center gap-1.5">
+          {coin.tweetMention && (
+            <span className={`font-mono text-xs px-1.5 py-0.5 rounded-full border ${
+              coin.isOfficial
+                ? 'bg-yellow-950/60 border-yellow-700/50 text-yellow-300'
+                : 'bg-gray-900 border-gray-700 text-gray-400'
+            }`}>
+              {coin.isOfficial ? '🐦' : '⚠️🐦'} {coin.tweetMention}
+            </span>
+          )}
+          {showBadge && <span className="text-purple-400 font-semibold">🚀 Migrated</span>}
+        </div>
       </div>
 
       {/* Enhanced progress bar for "about to migrate" */}
@@ -360,6 +372,9 @@ export default function Market() {
       {selectedCoinId && (
         <CoinModal coinId={selectedCoinId} onClose={() => setSelectedCoinId(null)} />
       )}
+
+      {/* Tweet Feed — fixed right sidebar, self-contained */}
+      <TweetFeed />
     </div>
   );
 }

@@ -565,7 +565,18 @@ export default function CoinModal({ coinId, onClose }) {
                 <div className="flex items-center justify-between mb-5 pr-8">
                   <div>
                     <h2 className="text-2xl font-bold text-white">{coin.name}</h2>
-                    <span className="text-gray-500 text-sm font-mono">${coin.ticker}</span>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span className="text-gray-500 text-sm font-mono">${coin.ticker}</span>
+                      {coin.tweetMention && (
+                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${
+                          coin.isOfficial
+                            ? 'bg-yellow-950/60 border-yellow-700/50 text-yellow-300'
+                            : 'bg-gray-900 border-gray-700 text-gray-400'
+                        }`}>
+                          {coin.isOfficial ? '🐦' : '⚠️🐦'} {coin.tweetMention}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-mono font-bold text-white">{fmt(price)}</div>

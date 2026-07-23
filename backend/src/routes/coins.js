@@ -37,6 +37,8 @@ router.get('/', async (req, res) => {
         holderCount:    priceEngine.getHolderCount(coin.id),
         topHolderPct:   parseFloat((priceEngine.getTopHolderPct?.(coin.id) ?? 0).toFixed(1)),
         isBundled:      priceEngine.getIsBundled?.(coin.id) ?? false,
+        tweetMention:   coin.tweetMention ?? null,
+        isOfficial:     coin.isOfficial   ?? false,
       };
     });
 

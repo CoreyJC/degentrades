@@ -10,8 +10,10 @@ const tradeRoutes = require('./routes/trade');
 const portfolioRoutes = require('./routes/portfolio');
 const leaderboardRoutes = require('./routes/leaderboard');
 const earningsRoutes    = require('./routes/earnings');
+const tweetsRoutes      = require('./routes/tweets');
 const priceEngine          = require('./services/priceEngine');
 const tokenGenerator       = require('./services/tokenGenerator');
+const tweetService         = require('./services/tweetService');
 const distributionService  = require('./services/distributionService');
 const seasonService        = require('./services/seasonService');
 
@@ -43,6 +45,7 @@ app.use('/api/trade', tradeRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/earnings',    earningsRoutes);
+app.use('/api/tweets',      tweetsRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -58,6 +61,11 @@ priceEngine.start(io);
 
 // Start token generator — spawns new coins every 2-5 min
 tokenGenerator.start();
+
+// Wire tweet service with socket + token generator, then start
+tweetService.setIo(io);
+tweetService.setTokenGenerator(tokenGenerator);
+tweetService.start();
 
 // Start SOL distribution service (no-ops if env vars missing)
 distributionService.init();
