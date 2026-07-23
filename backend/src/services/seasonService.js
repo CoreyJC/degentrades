@@ -2,18 +2,33 @@ const cron = require('node-cron');
 const prisma = require('../lib/prisma');
 const priceEngine = require('./priceEngine');
 
-// Reward tiers for top 10
+// Reward tiers for top 25
 const REWARD_TABLE = [
-  { rank: 1, bonusSol: 100 },
-  { rank: 2, bonusSol: 50 },
-  { rank: 3, bonusSol: 25 },
-  { rank: 4, bonusSol: 15 },
-  { rank: 5, bonusSol: 15 },
-  { rank: 6, bonusSol: 10 },
-  { rank: 7, bonusSol: 10 },
-  { rank: 8, bonusSol: 10 },
-  { rank: 9, bonusSol: 10 },
-  { rank: 10, bonusSol: 10 },
+  { rank: 1,  bonusSol: 10 },
+  { rank: 2,  bonusSol: 7  },
+  { rank: 3,  bonusSol: 5  },
+  { rank: 4,  bonusSol: 3  },
+  { rank: 5,  bonusSol: 3  },
+  { rank: 6,  bonusSol: 2  },
+  { rank: 7,  bonusSol: 2  },
+  { rank: 8,  bonusSol: 2  },
+  { rank: 9,  bonusSol: 2  },
+  { rank: 10, bonusSol: 2  },
+  { rank: 11, bonusSol: 1  },
+  { rank: 12, bonusSol: 1  },
+  { rank: 13, bonusSol: 1  },
+  { rank: 14, bonusSol: 1  },
+  { rank: 15, bonusSol: 1  },
+  { rank: 16, bonusSol: 1  },
+  { rank: 17, bonusSol: 1  },
+  { rank: 18, bonusSol: 1  },
+  { rank: 19, bonusSol: 1  },
+  { rank: 20, bonusSol: 1  },
+  { rank: 21, bonusSol: 1  },
+  { rank: 22, bonusSol: 1  },
+  { rank: 23, bonusSol: 1  },
+  { rank: 24, bonusSol: 1  },
+  { rank: 25, bonusSol: 1  },
 ];
 
 function getBonusSolForRank(rank) {
@@ -84,24 +99,24 @@ async function resetSeason() {
   // 2. Calculate leaderboard rankings
   const ranked = await buildLeaderboard();
 
-  // 3. Save top 10 as SeasonReward records
-  const top10 = ranked.slice(0, 10);
-  for (let i = 0; i < top10.length; i++) {
+  // 3. Save top 25 as SeasonReward records
+  const top25 = ranked.slice(0, 25);
+  for (let i = 0; i < top25.length; i++) {
     const rank = i + 1;
     const bonusSol = getBonusSolForRank(rank);
     await prisma.seasonReward.create({
       data: {
         seasonId: currentSeason.id,
-        userId: top10[i].userId,
+        userId: top25[i].userId,
         rank,
         bonusSol,
       },
     });
   }
 
-  // Build a map of userId -> bonusSol for top 10
+  // Build a map of userId -> bonusSol for top 25
   const bonusMap = {};
-  top10.forEach((u, i) => {
+  top25.forEach((u, i) => {
     bonusMap[u.userId] = getBonusSolForRank(i + 1);
   });
 

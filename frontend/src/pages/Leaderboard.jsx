@@ -13,11 +13,12 @@ function fmtUSD(sol) {
 }
 
 const REWARD_TIERS = [
-  { rank: 1,     label: '🥇 #1',    sol: 100, color: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/40 text-yellow-300' },
-  { rank: 2,     label: '🥈 #2',    sol: 50,  color: 'from-slate-400/20 to-slate-500/10 border-slate-400/40 text-slate-300' },
-  { rank: 3,     label: '🥉 #3',    sol: 25,  color: 'from-orange-700/20 to-orange-800/10 border-orange-600/40 text-orange-300' },
-  { rank: '4-5', label: '4-5',      sol: 15,  color: 'from-purple-500/10 to-purple-600/5 border-purple-500/30 text-purple-300' },
-  { rank: '6-10',label: '6-10',     sol: 10,  color: 'from-indigo-500/10 to-indigo-600/5 border-indigo-500/30 text-indigo-300' },
+  { rank: 1,      label: '🥇 #1',    sol: 10, color: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/40 text-yellow-300' },
+  { rank: 2,      label: '🥈 #2',    sol: 7,  color: 'from-slate-400/20 to-slate-500/10 border-slate-400/40 text-slate-300' },
+  { rank: 3,      label: '🥉 #3',    sol: 5,  color: 'from-orange-700/20 to-orange-800/10 border-orange-600/40 text-orange-300' },
+  { rank: '4-5',  label: '4–5',      sol: 3,  color: 'from-purple-500/10 to-purple-600/5 border-purple-500/30 text-purple-300' },
+  { rank: '6-10', label: '6–10',     sol: 2,  color: 'from-indigo-500/10 to-indigo-600/5 border-indigo-500/30 text-indigo-300' },
+  { rank: '11-25',label: '11–25',    sol: 1,  color: 'from-gray-700/10 to-gray-800/5 border-gray-600/30 text-gray-400' },
 ];
 
 function SkeletonRow() {
@@ -135,7 +136,7 @@ export default function Leaderboard() {
           <h1 className="text-4xl font-black text-white tracking-tight">
             🏆 DEGEN LEADERBOARD
           </h1>
-          <p className="text-gray-400 mt-2 text-sm">Top 10 traders win SOL rewards each month</p>
+          <p className="text-gray-400 mt-2 text-sm">Top 25 traders win SOL rewards each month</p>
         </div>
 
         {/* Season Banner */}
@@ -156,7 +157,7 @@ export default function Leaderboard() {
         )}
 
         {/* Rewards Legend */}
-        <div className="grid grid-cols-5 gap-2 mb-7">
+        <div className="grid grid-cols-6 gap-2 mb-7">
           {REWARD_TIERS.map((tier) => (
             <div
               key={tier.rank}
@@ -195,7 +196,7 @@ export default function Leaderboard() {
                 {rest.map((row, i) => {
                   const rank = i + 4;
                   const isMe = row.username === user?.username;
-                  const isTop10 = rank <= 10;
+                  const isTop25 = rank <= 25;
                   const up = row.gainPct >= 0;
                   return (
                     <div
@@ -207,7 +208,7 @@ export default function Leaderboard() {
                     >
                       {/* Rank badge */}
                       <span className={`text-xs font-bold w-7 h-6 flex items-center justify-center rounded-md
-                        ${isTop10 ? 'bg-green-900/60 text-green-400' : 'bg-gray-800 text-gray-500'}`}>
+                        ${rank <= 10 ? 'bg-green-900/60 text-green-400' : isTop25 ? 'bg-gray-700/60 text-gray-400' : 'bg-gray-800 text-gray-500'}`}>
                         {rank}
                       </span>
 
@@ -217,8 +218,8 @@ export default function Leaderboard() {
                         {isMe && <span className="text-xs text-indigo-500 ml-1.5">(you)</span>}
                       </span>
 
-                      {/* Bonus SOL badge for top 10 */}
-                      {isTop10 && (
+                      {/* Bonus SOL badge for top 25 */}
+                      {isTop25 && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300 border border-purple-700/40">
                           +{row.bonusSol} SOL
                         </span>
