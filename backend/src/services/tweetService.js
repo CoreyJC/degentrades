@@ -10,6 +10,15 @@
 const { randomUUID } = require('crypto');
 const priceEngine     = require('./priceEngine');
 
+// Parse follower strings like "42.1K", "2.3M" into raw numbers
+function _parseFollowers(str) {
+  if (!str) return 1_000;
+  const n = parseFloat(str);
+  if (str.includes('M')) return Math.floor(n * 1_000_000);
+  if (str.includes('K')) return Math.floor(n * 1_000);
+  return Math.floor(n) || 1_000;
+}
+
 // ── Celebrity accounts ─────────────────────────────────────────────────────────
 const CELEBRITY_ACCOUNTS = [
   { handle: '@realDonaldTrump', name: 'Donald J. Trump', verified: true, followers: '18.2M', avatar: '🇺🇸', coinTheme: 'TRUMP', coinNames: ['TrumpX', 'TrumpMaga', 'TrumpInu', 'Maga45'] },
@@ -221,12 +230,21 @@ function _triggerSmallTweet() {
     coinTicker = refCoin.coinTicker;
     coinId = refCoin.coinId;
     text = _rand(SHILL_TWEETS).replace(/\[COIN\]/g, coinTicker);
+    // Apply hype to the coin — parse follower count (e.g. "42.1K" → 42100)
+    if (coinId) {
+      const followers = _parseFollowers(account.followers);
+      priceEngine.applyTweetImpact(coinId, 'shill', followers);
+    }
   } else if (refCoin && r < 0.55) {
     // FUD
     type = 'fud';
     coinTicker = refCoin.coinTicker;
     coinId = refCoin.coinId;
     text = _rand(FUD_TWEETS).replace(/\[COIN\]/g, coinTicker);
+    if (coinId) {
+      const followers = _parseFollowers(account.followers);
+      priceEngine.applyTweetImpact(coinId, 'fud', followers);
+    }
   } else {
     // General degen commentary
     type = 'general';

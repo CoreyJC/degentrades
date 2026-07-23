@@ -441,6 +441,42 @@ function registerCoin(coin, fate = 'bleeder', options = {}) {
 }
 
 function removeCoin(coinId)      { delete state[coinId]; }
+
+/**
+ * Apply a tweet hype event to a coin.
+ * shill = temporary pump + volatility spike
+ * fud   = temporary selling pressure + volatility spike
+ * Scaled by account follower count (bigger account = bigger impact).
+ */
+function applyTweetImpact(coinId, type, followerCount) {
+  const s = state[coinId];
+  if (!s || !s.price) return;
+
+  // Scale impact by follower count (log scale: 1K=1x, 100K=2x, 1M=3x, 50M=4x)
+  const followerScale = Math.min(4.0, 1 + Math.log10(Math.max(followerCount, 1_000)) / 3);
+
+  if (type === 'shill') {
+    s.hypeType       = 'shill';
+    s.hypeTicks      = Math.floor((20 + Math.random() * 40) * followerScale); // 20-160 ticks
+    s.hypeMult       = 1.5 + Math.random() * 1.5 * followerScale;  // 1.5x–6x volatility
+    s.hypeDir        = 1;  // bullish
+    // Immediate price pop
+    const pop = 0.03 + Math.random() * 0.07 * followerScale;
+    s.price = s.price * (1 + pop);
+    if (s.price > s.ath) s.ath = s.price;
+    console.log(`📣 SHILL [x${followerScale.toFixed(1)}]: ${s.ticker} +${(pop*100).toFixed(1)}% pop, ${s.hypeTicks} hype ticks`);
+  } else if (type === 'fud') {
+    s.hypeType       = 'fud';
+    s.hypeTicks      = Math.floor((15 + Math.random() * 30) * followerScale);
+    s.hypeMult       = 1.3 + Math.random() * 1.0 * followerScale;
+    s.hypeDir        = -1; // bearish
+    // Immediate price drop
+    const drop = 0.02 + Math.random() * 0.05 * followerScale;
+    s.price = Math.max(s.price * (1 - drop), 1e-14);
+    console.log(`🔥 FUD [x${followerScale.toFixed(1)}]: ${s.ticker} -${(drop*100).toFixed(1)}% drop, ${s.hypeTicks} hype ticks`);
+  }
+}
+
 function getCurrentPrice(coinId) { return state[coinId]?.price ?? null; }
 function getHistory(coinId)      { return state[coinId]?.history ?? []; }
 function getAllPrices()           { return Object.fromEntries(Object.entries(state).map(([id, s]) => [id, s.price])); }
@@ -716,6 +752,34 @@ async function tick() {
       next = _cycleTick(coinId, s);
     }
 
+    // ── Hype modifier (tweet shill/FUD still active) ──
+    if (s.hypeTicks > 0 && next > 1e-14) {
+      s.hypeTicks--;
+      const decayFactor = s.hypeTicks / (s.hypeTicks + 1); // fades as ticks expire
+      const hypeMove = _rand(0.003, 0.018) * s.hypeMult * (0.5 + 0.5 * decayFactor);
+      if (s.hypeDir === 1) {
+        // Shill: mostly up, occasional volatile dip
+        if (Math.random() < 0.20) {
+          next = Math.max(next * (1 - hypeMove * 0.6), 1e-14); // sharp but smaller dips
+        } else {
+          next = next * (1 + hypeMove);
+        }
+      } else {
+        // FUD: mostly down, occasional relief bounce
+        if (Math.random() < 0.18) {
+          next = next * (1 + hypeMove * 0.5);
+        } else {
+          next = Math.max(next * (1 - hypeMove), 1e-14);
+        }
+      }
+      if (s.hypeTicks === 0) {
+        console.log(`📶 ${s.ticker} hype worn off`);
+        s.hypeType = null;
+        s.hypeDir  = null;
+        s.hypeMult = null;
+      }
+    }
+
     s.price = Math.max(next, 1e-14);
     next    = s.price;
     if (next > s.ath) s.ath = next;
@@ -829,6 +893,6 @@ function stop() {
 module.exports = {
   start, stop,
   registerCoin, removeCoin,
-  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount, getTopHolderPct, getIsBundled, applyTradeImpact,
+  getCurrentPrice, getHistory, getAllPrices, getCreatedAt, getHolderCount, getTopHolderPct, getIsBundled, applyTradeImpact, applyTweetImpact,
   getIo,
 };
