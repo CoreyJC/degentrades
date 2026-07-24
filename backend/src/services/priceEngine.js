@@ -139,7 +139,7 @@ function _chopTick(s) {
   const p = s.price;
   const { rugMult, volScale, devDumpChance, devDistributing } = _holderMods(s);
   if (Math.random() < 0.003 * rugMult) return 1e-14;
-  // Bundled dev dump — sudden red candle from whale selling into chop
+  // Bundled dev dump - sudden red candle from whale selling into chop
   if (devDumpChance > 0 && Math.random() < devDumpChance) {
     s.topHolderPct = Math.max(1, (s.topHolderPct ?? 50) - _rand(2, 6)); // dev sold some
     return Math.max(p * (1 - _rand(0.10, 0.25) * volScale), 1e-14);
@@ -162,7 +162,7 @@ function _resolutionTick(s) {
   const atTarget = p >= s.cycleTarget * 0.80;
   const r = Math.random();
   if (atTarget) {
-    // Topping — choppy at the high
+    // Topping - choppy at the high
     if (r < 0.35) return p * (1 + _rand(0.003, 0.025));
     if (r < 0.70) return Math.max(p * (1 - _rand(0.01, 0.05)), 1e-14);
     return p * (1 + _rand(-0.004, 0.004));
@@ -174,13 +174,13 @@ function _resolutionTick(s) {
   }
 }
 
-// RETRACE: falling back toward floor — rug risk is highest here
+// RETRACE: falling back toward floor - rug risk is highest here
 function _retraceTick(s) {
   const p = s.price;
   const { rugMult, volScale, devDumpChance } = _holderMods(s);
   s.retraceTick = (s.retraceTick ?? 0) + 1;
 
-  // Rug: highest during retrace — concentration + fate multiplies risk
+  // Rug: highest during retrace - concentration + fate multiplies risk
   const fateRugMult = s.fate === 'bleeder' ? 1.6 : s.fate === 'runner' ? 0.4 : 1.0;
   if (Math.random() < (0.007 + s.retraceTick * 0.00015) * rugMult * fateRugMult) return 1e-14;
 
@@ -200,7 +200,7 @@ function _retraceTick(s) {
       s.fadeTick  = 0;
       return Math.max(p * (1 - _rand(0.01, 0.04)), 1e-14);
     }
-    // Landed somewhere above dead zone — start new cycle from here
+    // Landed somewhere above dead zone - start new cycle from here
     s.cyclePhase  = 'surge';
     s.cycleTick   = 0;
     s.retraceTick = 0;
@@ -211,7 +211,7 @@ function _retraceTick(s) {
 
   const distToFloor = (p - floor) / Math.max(p, 1e-14);
 
-  // Near floor — bouncing/consolidating
+  // Near floor - bouncing/consolidating
   if (distToFloor < 0.05) {
     if (Math.random() < 0.35) {
       // Floor bounce → new surge
@@ -224,7 +224,7 @@ function _retraceTick(s) {
     return Math.max(p * (1 - _rand(0.004, 0.018)), 1e-14);
   }
 
-  // Still falling — high concentration makes it fall faster
+  // Still falling - high concentration makes it fall faster
   if (Math.random() < 0.11) return p * (1 + _rand(0.01, 0.05)); // dead cat bounce
   const fallSpeed = (0.012 + distToFloor * 0.09) * volScale;
   return Math.max(p * (1 - _rand(fallSpeed * 0.4, fallSpeed)), 1e-14);
@@ -247,16 +247,16 @@ function _fadeTick(s) {
   return Math.max(p * (1 - _rand(0.005, 0.028)), 1e-14);
 }
 
-// RUNNER: continuous pump to $69K — rare, dramatic, unstoppable
+// RUNNER: continuous pump to $69K - rare, dramatic, unstoppable
 function _runnerTick(s) {
   const p  = s.price;
   const mc = p * TOTAL_SUPPLY;
 
-  // Celebrity coins almost never die pre-migration — scams die more often
+  // Celebrity coins almost never die pre-migration - scams die more often
   const deathChance = s.isScamCopy ? 0.006 : s.isCelebrityCoin ? 0.0005 : 0.002;
   if (Math.random() < deathChance) return 1e-14;
 
-  // Near $69K — create drama (slowdown + big chop), more dramatic for celebrity coins
+  // Near $69K - create drama (slowdown + big chop), more dramatic for celebrity coins
   if (mc > 45_000) {
     const progress = (mc - 45_000) / (MIGRATION_THRESHOLD - 45_000);
     const dampen   = 1 - progress * 0.45;
@@ -275,23 +275,23 @@ function _runnerTick(s) {
     const r = Math.random();
     if (r < 0.18) return Math.max(p * (1 - _rand(0.04, 0.15)), 1e-14); // sharp dips
     if (r < 0.28) return p * (1 + _rand(0.001, 0.012));                 // brief pause
-    return p * (1 + _rand(0.020, 0.090));  // big pumps — 2-9% per tick
+    return p * (1 + _rand(0.020, 0.090));  // big pumps - 2-9% per tick
   }
 
-  // Normal runner — choppy uptrend
+  // Normal runner - choppy uptrend
   const r = Math.random();
   if (r < 0.12) return Math.max(p * (1 - _rand(0.02, 0.08)), 1e-14);
   if (r < 0.22) return p * (1 + _rand(0.001, 0.008));
   return p * (1 + _rand(0.006, 0.038));
 }
 
-// End of 3-minute cycle — decide continue or retrace
+// End of 3-minute cycle - decide continue or retrace
 function _endCycle(s) {
   const p        = s.price;
   const mc       = p * TOTAL_SUPPLY;
   const pumpedWell = p >= s.cycleTarget * 0.70;
 
-  // Runner unlock — threshold depends on fate
+  // Runner unlock - threshold depends on fate
   const runnerCycles = s.fate === 'runner' ? 1 : s.fate === 'pumper' ? 2 : 3;
   const runnerMcMin  = s.fate === 'runner' ? 5_000 : 15_000; // was 8K/20K
   const runnerChance = s.fate === 'runner' ? 0.42 : s.fate === 'pumper' ? 0.20 : 0.08; // was 0.35/0.14/0.05
@@ -345,34 +345,32 @@ function _cycleTick(coinId, s) {
 function _bootstrap(coin, fate = 'bleeder', options = {}) {
   const startPrice = coin.currentPrice || (START_MC / TOTAL_SUPPLY);
 
+  // Celebrity coin overrides — must come before cycleTarget
+  const isCelebrity  = options.isCelebrityCoin === true;
+  const isOfficial   = options.isOfficial === true;
+  const isScamCopy   = options.isOfficial === false && !!options.tweetMention;
+  const effectiveFate = (isCelebrity || isOfficial) ? 'runner' : isScamCopy ? 'bleeder' : fate;
+
+  // Celebrity official coins get a massive first pump target to guarantee migration quickly
+  const celebCycleTarget = isCelebrity && isOfficial
+    ? startPrice * (1 + _rand(2.0, 8.0))  // 200–800% — blasts through $69K fast
+    : null;
+
   // Fate-based first pump target
   const firstPumpPct =
-    fate === 'runner'  ? _rand(0.80, 3.00) :  // runners start aggressive
-    fate === 'pumper'  ? _rand(0.40, 1.80) :  // pumpers aim high
-                        _rand(0.15, 0.80);    // bleeders pump weak
+    effectiveFate === 'runner'  ? _rand(0.80, 3.00) :
+    effectiveFate === 'pumper'  ? _rand(0.40, 1.80) :
+                                  _rand(0.15, 0.80);
 
   const cycleTarget = celebCycleTarget ?? (startPrice * (1 + firstPumpPct));
 
   // Runners are rarely bundled; bleeders more often are
-  const bundledChance = fate === 'runner' ? 0.05 : fate === 'pumper' ? 0.15 : 0.28;
+  const bundledChance = effectiveFate === 'runner' ? 0.05 : effectiveFate === 'pumper' ? 0.15 : 0.28;
   const isBundled     = Math.random() < bundledChance;
   const topHolderPct  = isBundled
     ? 60 + Math.random() * 30
-    : fate === 'runner' ? 3 + Math.random() * 12   // runners have distributed bags
-    :                     5 + Math.random() * 25;
-
-  // Celebrity coin overrides
-  const isCelebrity  = options.isCelebrityCoin === true;
-  const isOfficial   = options.isOfficial === true;   // legit tweet-spawned coin
-  const isScamCopy   = options.isOfficial === false && !!options.tweetMention; // lookalike
-  const effectiveFate = (isCelebrity || isOfficial) ? 'runner' : isScamCopy ? 'bleeder' : fate;
-
-  // Celebrity official coins: ultra-aggressive pre-migration pump target
-  // They start at $20K-$50K and need to hit $69K — that’s only a 1.4x-3.5x move
-  // Give them a cycleTarget that overshoots $69K so they blast through migration fast
-  const celebCycleTarget = isCelebrity && isOfficial
-    ? startPrice * (1 + _rand(2.0, 8.0))  // 200-800% first pump — guarantees migration
-    : null;
+    : effectiveFate === 'runner' ? 3 + Math.random() * 12
+    :                              5 + Math.random() * 25;
 
   // Weighted post-migration ceiling for celebrity coins: 50% $10M, 35% $100M, 15% $1B
   let postMigrationCeiling = null;
@@ -429,7 +427,7 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
     console.log(`🌟 CELEBRITY COIN: ${coin.name} (${coin.ticker}) ceiling=$${(postMigrationCeiling/1_000_000).toFixed(0)}M`);
   }
   if (isScamCopy) {
-    console.log(`💀 SCAM COPY: ${coin.name} (${coin.ticker}) — bleeder fate, will rug fast`);
+    console.log(`💀 SCAM COPY: ${coin.name} (${coin.ticker}) - bleeder fate, will rug fast`);
   }
 }
 
@@ -449,7 +447,7 @@ async function init() {
     }
   }
   initialized = true;
-  console.log(`💹 Price engine v4 initialized — ${coins.length} coins loaded`);
+  console.log(`💹 Price engine v4 initialized - ${coins.length} coins loaded`);
 }
 
 function registerCoin(coin, fate = 'bleeder', options = {}) {
@@ -480,7 +478,7 @@ function applyTweetImpact(coinId, type, followerCount) {
   if (type === 'shill') {
     s.hypeType       = 'shill';
     s.hypeTicks      = Math.floor((20 + Math.random() * 40) * followerScale); // 20-160 ticks
-    s.hypeMult       = 1.5 + Math.random() * 1.5 * followerScale;  // 1.5x–6x volatility
+    s.hypeMult       = 1.5 + Math.random() * 1.5 * followerScale;  // 1.5x-6x volatility
     s.hypeDir        = 1;  // bullish
     // Immediate price pop
     const pop = 0.03 + Math.random() * 0.07 * followerScale;
@@ -608,7 +606,7 @@ function _postMigrationTick(s) {
   const p = s.price;
   s.postMigTick = (s.postMigTick ?? 0) + 1;
 
-  // Initialize phase on first tick — randomize duration per coin to desync mass dumps
+  // Initialize phase on first tick - randomize duration per coin to desync mass dumps
   if (!s.postMigPhase) {
     s.postMigPhase    = 'dump';
     s.postMigTick     = 0;
@@ -616,11 +614,11 @@ function _postMigrationTick(s) {
     s.consolDuration  = _randInt(30, 100);  // consolidation length varies too
     s.resistanceLevel = p;
     s.supportLevel    = p * 0.60;
-    // 20% of coins skip the dump entirely — straight out of gate
+    // 20% of coins skip the dump entirely - straight out of gate
     if (Math.random() < 0.20) {
       s.postMigPhase = 'consolidation';
       s.postMigTick  = 0;
-      console.log(`🏛  MIGRATED: ${s.ticker} — skipping dump, straight to consolidation`);
+      console.log(`🏛  MIGRATED: ${s.ticker} - skipping dump, straight to consolidation`);
     } else {
       console.log(`🏛  MIGRATED: ${s.ticker} entering post-migration dump (${s.dumpDuration} ticks)`);
     }
@@ -686,7 +684,7 @@ function _postMigrationTick(s) {
     if (s.isCelebrityCoin && s.postMigrationCeiling && mc >= s.postMigrationCeiling) {
       s.postMigPhase = 'bleed';
       s.postMigTick  = 0;
-      console.log(`🌟 ${s.ticker} hit celebrity ceiling $${(s.postMigrationCeiling/1_000_000).toFixed(0)}M — bleeding`);
+      console.log(`🌟 ${s.ticker} hit celebrity ceiling $${(s.postMigrationCeiling/1_000_000).toFixed(0)}M - bleeding`);
       return p * (1 + _rand(-0.04, -0.01));
     }
 
@@ -717,7 +715,7 @@ function _postMigrationTick(s) {
       return Math.max(p * (1 - _rand(0.005, 0.04)), 1e-14);
     }
 
-    // Rug risk rises as MC climbs — official coins more resilient at altitude
+    // Rug risk rises as MC climbs - official coins more resilient at altitude
     const mcMult = s.isOfficial
       ? (mc > 10_000_000 ? 0.004 : mc > 1_000_000 ? 0.002 : 0.001)
       : (mc > 10_000_000 ? 0.010 : mc > 1_000_000 ? 0.005 : 0.002);
@@ -740,7 +738,7 @@ function _postMigrationTick(s) {
     // Late rug risk
     if (s.postMigTick > 300 && Math.random() < 0.004) return 1e-14;
 
-    // Pump — slower, choppier (was 1-5.5% per tick)
+    // Pump - slower, choppier (was 1-5.5% per tick)
     const pumpRate = mc > 5_000_000 ? _rand(0.003, 0.018)   // slows near top
                    : mc > 500_000   ? _rand(0.005, 0.028)
                    :                  _rand(0.008, 0.040);
