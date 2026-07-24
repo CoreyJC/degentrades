@@ -175,8 +175,17 @@ async function spawnCoinWithOverrides(overrides = {}) {
       ? overrides.ticker.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6)
       : nameToTickerBase(name);
     const ticker         = await uniqueTicker(tickerBase);
-    const currentPrice   = randomStartingPrice();
-    const rugProbability = randomRugProbability();
+    // Celebrity official coins spawn near migration; scam copies spawn mid-range
+    const isCeleb    = overrides.isCelebrityCoin === true;
+    const isOfficial = overrides.isOfficial === true;
+    const isScam     = overrides.isOfficial === false && !!overrides.tweetMention;
+    const startMc    = isCeleb && isOfficial
+      ? 20_000 + Math.random() * 30_000   // $20K–$50K — near migration already
+      : isScam
+      ? 5_000  + Math.random() * 15_000   // $5K–$20K — visible but will rug
+      : null;                             // normal coins use standard pricing
+    const currentPrice   = startMc ? startMc / 1_000_000_000 : randomStartingPrice();
+    const rugProbability = isScam ? 0.012 + Math.random() * 0.008 : randomRugProbability();
     const marketCap      = currentPrice * 1_000_000_000;
 
     const coin = await prisma.coin.create({

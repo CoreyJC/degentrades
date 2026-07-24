@@ -251,16 +251,31 @@ function _fadeTick(s) {
 function _runnerTick(s) {
   const p  = s.price;
   const mc = p * TOTAL_SUPPLY;
-  if (Math.random() < 0.002) return 1e-14; // even runners can die
 
-  // Near $69K — create drama (slowdown + big chop)
+  // Celebrity coins almost never die pre-migration — scams die more often
+  const deathChance = s.isScamCopy ? 0.006 : s.isCelebrityCoin ? 0.0005 : 0.002;
+  if (Math.random() < deathChance) return 1e-14;
+
+  // Near $69K — create drama (slowdown + big chop), more dramatic for celebrity coins
   if (mc > 45_000) {
     const progress = (mc - 45_000) / (MIGRATION_THRESHOLD - 45_000);
-    const dampen   = 1 - progress * 0.45; // was 0.75 — eased slowdown near migration
+    const dampen   = 1 - progress * 0.45;
     const r = Math.random();
-    if (r < 0.18) return Math.max(p * (1 - _rand(0.03, 0.12)), 1e-14);
-    if (r < 0.35) return p * (1 + _rand(0.001, 0.012));
-    return p * (1 + _rand(0.006, 0.035) * dampen);
+    // Celebrity coins: bigger swings near migration
+    const dipMag  = s.isCelebrityCoin ? _rand(0.05, 0.18) : _rand(0.03, 0.12);
+    const pumpMag = s.isCelebrityCoin ? _rand(0.010, 0.020) : _rand(0.001, 0.012);
+    if (r < 0.20) return Math.max(p * (1 - dipMag), 1e-14);
+    if (r < 0.38) return p * (1 + pumpMag);
+    const upMag = s.isCelebrityCoin ? _rand(0.015, 0.060) : _rand(0.006, 0.035);
+    return p * (1 + upMag * dampen);
+  }
+
+  // Celebrity pre-migration: explosive moves, big dips, wild chart
+  if (s.isCelebrityCoin) {
+    const r = Math.random();
+    if (r < 0.18) return Math.max(p * (1 - _rand(0.04, 0.15)), 1e-14); // sharp dips
+    if (r < 0.28) return p * (1 + _rand(0.001, 0.012));                 // brief pause
+    return p * (1 + _rand(0.020, 0.090));  // big pumps — 2-9% per tick
   }
 
   // Normal runner — choppy uptrend
@@ -336,7 +351,7 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
     fate === 'pumper'  ? _rand(0.40, 1.80) :  // pumpers aim high
                         _rand(0.15, 0.80);    // bleeders pump weak
 
-  const cycleTarget = startPrice * (1 + firstPumpPct);
+  const cycleTarget = celebCycleTarget ?? (startPrice * (1 + firstPumpPct));
 
   // Runners are rarely bundled; bleeders more often are
   const bundledChance = fate === 'runner' ? 0.05 : fate === 'pumper' ? 0.15 : 0.28;
@@ -351,6 +366,13 @@ function _bootstrap(coin, fate = 'bleeder', options = {}) {
   const isOfficial   = options.isOfficial === true;   // legit tweet-spawned coin
   const isScamCopy   = options.isOfficial === false && !!options.tweetMention; // lookalike
   const effectiveFate = (isCelebrity || isOfficial) ? 'runner' : isScamCopy ? 'bleeder' : fate;
+
+  // Celebrity official coins: ultra-aggressive pre-migration pump target
+  // They start at $20K-$50K and need to hit $69K — that’s only a 1.4x-3.5x move
+  // Give them a cycleTarget that overshoots $69K so they blast through migration fast
+  const celebCycleTarget = isCelebrity && isOfficial
+    ? startPrice * (1 + _rand(2.0, 8.0))  // 200-800% first pump — guarantees migration
+    : null;
 
   // Weighted post-migration ceiling for celebrity coins: 50% $10M, 35% $100M, 15% $1B
   let postMigrationCeiling = null;
